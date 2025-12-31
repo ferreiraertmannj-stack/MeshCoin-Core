@@ -1,29 +1,66 @@
-# 🌐 MeshCoin (MESH) - Core Prototype
+# 🌐 MeshCoin (MESH) - Camada 0 e Infraestrutura Off-Grid
 
-> **Conectividade Financeira Off-Grid para Áreas Remotas e IoT.**
+![Status do Projeto](https://img.shields.io/badge/Status-Prot%C3%B3tipo%20Alpha-blue)
+![Licença](https://img.shields.io/badge/License-MIT-green)
+![Local](https://img.shields.io/badge/Origem-Extrema%2FMG-red)
 
-A MeshCoin é um protocolo de Camada 0 focado em transportar valor e dados através de redes mesh (Bluetooth/LoRa) sem necessidade de conexão constante com a internet.
+A **MeshCoin** não é apenas uma criptomoeda; é um protocolo de transporte de dados de **Camada 0** desenhado para funcionar sem a necessidade de internet centralizada. Através de uma rede Mesh Ad-Hoc, transformamos smartphones, veículos e infraestruturas solares em nós de uma rede global resiliente, soberana e privada.
 
-## 🚀 Funcionalidades Atuais (Simulação v0.1)
+> **[📄 LEIA O WHITEPAPER COMPLETO (PDF)](Whitepaper-MeshCoin-v1.pdf)** ---
 
-Este repositório contém a Prova de Conceito (PoC) em Python demonstrando:
-- **NeonHash Logic:** Simulação do algoritmo de mineração PoW.
-- **Mesh Wallet:** Geração de chaves públicas/privadas (Secp256k1 mock).
-- **P2P Gossip:** Protocolo de chat descentralizado via arquivos locais.
-- **Ledger:** Sistema de contabilidade distribuída auditável.
+## 🚀 Diferenciais Únicos
 
-## 🛠 Como Rodar a Simulação
-
-1. Clone o repositório.
-2. Execute `python minerador_carteira.py` para gerar moedas.
-3. Execute `python chat_mesh.py` em dois terminais para simular a rede.
-4. Use `python enviar_pagamento.py` para transacionar valores.
-
-## 📍 Roadmap
-- [x] Simulação Lógica (Python)
-- [ ] Implementação em Hardware (Raspberry Pi Zero 2 W)
-- [ ] Integração com Bluetooth Low Energy (BLE)
-- [ ] Teste de Campo em Extrema/MG
+- **Conectividade Off-Grid:** Transacione e comunique-se via Bluetooth/Wi-Fi Ad-Hoc em "zonas de sombra" ou apagões de rede.
+- **Algoritmo NeonHash:** Mineração inclusiva otimizada para processadores ARM (Smartphones e Raspberry Pi), resistente a ASICs.
+- **Mesh Tunneling:** Transporte transações de **Bitcoin, Ethereum, Solana e Pix** de forma assíncrona através da rede.
+- **Soberania Digital:** Imunidade total a censura, bloqueios governamentais e quedas de servidores centrais.
 
 ---
-*Desenvolvido por Jean Ertmann.*
+
+## 🏗️ Ecossistema de Hardware
+
+O protocolo foi desenhado para rodar em três níveis de hardware:
+1.  **MeshBox Solar:** Unidades fixas autônomas para áreas rurais e telhados urbanos.
+2.  **MeshBox Nano (USB):** Dispositivos plug-and-play para residências, **caminhões logísticos** e carros de aplicativo.
+3.  **Smartphone App:** Transforme seu celular em um nó da rede sem custo adicional.
+
+---
+
+## 📱 Casos de Uso (Smart City)
+
+- **Logística 4.0:** Monitoramento de frotas e transporte de dados via "Mulas de Dados" (Caminhões) por todo o Brasil.
+- **Comércio Local:** Pagamentos via Pix e Cripto mesmo quando a internet do estabelecimento falha.
+- **Defesa Civil:** Alertas de emergência e comunicação em zonas de conflito ou desastres naturais.
+- **D'Apps:** Plataforma aberta para desenvolvimento de chats privados, rastreabilidade agro e micro-pagamentos IoT.
+
+---
+
+## 🛠️ Tecnologias Utilizadas
+
+- **Linguagem:** Python 3.x (Protótipo do Core)
+- **Criptografia:** ECDSA (Secp256k1)
+- **Protocolo de Rede:** Gossip Protocol / Ad-Hoc Networking
+- **Algoritmo de Consenso:** NeonHash (Proof-of-Work focado em ARM NEON)
+
+---
+
+## 🗺️ Roteiro (Roadmap)
+
+- [x] Concepção do Protocolo e Algoritmo NeonHash.
+- [x] Protótipo Funcional do Core (Blockchain, Wallet, Miner).
+- [ ] Lançamento do Whitepaper v1.0.
+- [ ] Testes de campo com hardware **MeshBox MB-01** em Extrema/MG.
+- [ ] Implementação do SDK para D'Apps e suporte a Pix Offline.
+
+---
+
+## 🤝 Contato e Contribuição
+
+O projeto MeshCoin é Open Source e nasceu em Extrema/MG. Se você é desenvolvedor, investidor ou entusiasta de infraestrutura resiliente, entre em contato:
+
+- **Desenvolvedor:** Jean Ertmann
+- **E-mail:** ferreiraertmannj@gmail.com
+- **GitHub:** [github.com/SeuUsuario/MeshCoin-Core](https://github.com/SeuUsuario/MeshCoin-Core)
+
+---
+"Conectando o indivíduo, onde a internet não chega."
