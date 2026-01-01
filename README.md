@@ -10,8 +10,8 @@ A **MeshCoin** não é apenas uma criptomoeda; é um protocolo de transporte de 
 
 ## 🚀 Diferenciais Únicos
 
-- **Conectividade Off-Grid:** Transacione e comunique-se via Bluetooth/Wi-Fi Ad-Hoc em "zonas de sombra" ou apagões de rede.
-- **Algoritmo NeonHash:** Mineração inclusiva otimizada para processadores ARM (Smartphones e Raspberry Pi), resistente a ASICs.
+- **Conectividade Off-Grid:** Transacione e comunique-se via Bluetooth/Wi-Fi Ad-Hoc em "zonas de sombra" ou apagões de rede ou em meio a governos autoritários com censura e sanções.
+- **Algoritmo NeonHash:** Mineração inclusiva otimizada para processadores ARM (Smartphones, Raspberry Pi, Orange Pi e dispositivos com processadores ARM), resistente a ASICs.
 - **Mesh Tunneling:** Transporte transações de **Bitcoin, Ethereum, Solana e Pix** de forma assíncrona através da rede.
 - **Soberania Digital:** Imunidade total a censura, bloqueios governamentais e quedas de servidores centrais.
 
@@ -28,10 +28,10 @@ O protocolo foi desenhado para rodar em três níveis de hardware:
 
 ## 📱 Casos de Uso (Smart City)
 
-- **Logística 4.0:** Monitoramento de frotas e transporte de dados via "Mulas de Dados" (Caminhões) por todo o Brasil.
+- **Logística 4.0:** Monitoramento de frotas e transporte de dados via "Mulas de Dados" (Caminhões) por todo o Brasil 🇧🇷 e no mundo 🌎.
 - **Comércio Local:** Pagamentos via Pix e Cripto mesmo quando a internet do estabelecimento falha.
 - **Defesa Civil:** Alertas de emergência e comunicação em zonas de conflito ou desastres naturais.
-- **D'Apps:** Plataforma aberta para desenvolvimento de chats privados, rastreabilidade agro e micro-pagamentos IoT.
+- **D'Apps:** Plataforma aberta para desenvolvimento de chats privados, rastreabilidade agro e micro-pagamentos IoT e muito mais 📲📡💻🔋.
 
 ---
 
@@ -49,14 +49,14 @@ O protocolo foi desenhado para rodar em três níveis de hardware:
 - [x] Concepção do Protocolo e Algoritmo NeonHash.
 - [x] Protótipo Funcional do Core (Blockchain, Wallet, Miner).
 - [ ] Lançamento do Whitepaper v1.0.
-- [ ] Testes de campo com hardware **MeshBox MB-01** em Extrema/MG.
-- [ ] Implementação do SDK para D'Apps e suporte a Pix Offline.
+- [ ] Testes de campo com hardware **MeshBox MB-01** em Extrema/MG 🇧🇷.
+- [ ] Implementação do SDK para D'Apps e suporte a Pix Offline 💻📡📲.
 
 ---
 
 ## 🤝 Contato e Contribuição
 
-O projeto MeshCoin é Open Source e nasceu em Extrema/MG. Se você é desenvolvedor, investidor ou entusiasta de infraestrutura resiliente, entre em contato:
+O projeto MeshCoin é Open Source e nasceu no Brasil 🇧🇷🌎. Se você é desenvolvedor, investidor ou entusiasta de infraestrutura resiliente, entre em contato:
 
 - **Desenvolvedor:** Jean Ertmann
 - **E-mail:** ferreiraertmannj@gmail.com
