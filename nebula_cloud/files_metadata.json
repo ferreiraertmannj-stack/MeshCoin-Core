@@ -1,0 +1,14 @@
+{
+  "README_md": {
+    "original_path": "/home/jean/nebula-cloud/README.md",
+    "fragments": {
+      "frag_README.md_0000": "infinix_hot_50"
+    },
+    "total_fragments": 1,
+    "success_fragments": 1,
+    "file_hash": "c80fdd6ce4781fbeaec352085f1ae00f9917416158b350c31063cd7cf0631794",
+    "encryption": "AES-256-GCM",
+    "kdf": "PBKDF2-SHA256-480k",
+    "timestamp": "2026-04-06T23:25:46.590609"
+  }
+}

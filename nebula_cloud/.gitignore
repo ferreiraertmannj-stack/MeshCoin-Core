@@ -1,0 +1,25 @@
+# Ambientes virtuais
+nebula-env/
+venv/
+env/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Dados gerados
+node_storage/
+tracker_db/
+fragmentos/
+recuperando/
+*.map.json
+
+# Configurações
+.env
+
+# Outros
+.DS_Store
+*.log
+*.txt

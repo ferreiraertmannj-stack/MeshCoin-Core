@@ -1,0 +1,78 @@
+import os
+import json
+import requests
+from datetime import datetime
+
+# ==================== CONFIGURAÇÃO DOS NÓS ====================
+NOS = [
+    {"id": "no_01_notebook", "ip": "192.168.0.108", "porta": 8000},
+    {"id": "no_02_infinix",  "ip": "192.168.0.102", "porta": 8000},   # IP do seu Infinix
+]
+
+TRACKER_DIR = "tracker_db"
+os.makedirs(TRACKER_DIR, exist_ok=True)
+
+def verificar_nos():
+    nos_online = []
+    for no in NOS:
+        try:
+            r = requests.get(f"http://{no['ip']}:{no['porta']}/status", timeout=5)
+            if r.status_code == 200:
+                dados = r.json()
+                print(f"✅ {no['id']} ONLINE → {dados.get('fragmentos_armazenados', 0)} fragmentos")
+                nos_online.append(no)
+        except:
+            print(f"❌ {no['id']} offline")
+    return nos_online
+
+def distribuir_arquivo(caminho: str, senha: str):
+    nos_online = verificar_nos()
+    if not nos_online:
+        print("❌ Nenhum nó disponível!")
+        return
+
+    # Usa o fragmenter.py que você já tem
+    pasta_frags = f"{TRACKER_DIR}/temp_frags"
+    from fragmenter import fragmentar_arquivo
+    fragmentar_arquivo(caminho, senha, pasta_frags)
+
+    with open(f"{pasta_frags}/meta.json") as f:
+        meta = json.load(f)
+
+    mapa = {}
+    fragmentos = [f for f in os.listdir(pasta_frags) if f.endswith('.bin')]
+
+    for i, frag in enumerate(sorted(fragmentos)):
+        no = nos_online[i % len(nos_online)]
+        caminho_frag = f"{pasta_frags}/{frag}"
+
+        with open(caminho_frag, 'rb') as f:
+            r = requests.post(
+                f"http://{no['ip']}:{no['porta']}/fragmento/{frag}",
+                files={"file": f}
+            )
+        if r.status_code == 200:
+            mapa[frag] = {"no_id": no["id"], "ip": no["ip"]}
+            print(f"📤 {frag} → {no['id']}")
+        else:
+            print(f"❌ Erro ao enviar {frag}")
+
+    nome_arquivo = os.path.basename(caminho)
+    registro = {"arquivo": nome_arquivo, "senha_hint": senha[:3]+"***", "meta": meta, "mapa": mapa}
+    with open(f"{TRACKER_DIR}/{nome_arquivo}.map.json", 'w') as f:
+        json.dump(registro, f, indent=2)
+
+    print(f"\n✅ Arquivo '{nome_arquivo}' distribuído com sucesso!")
+
+# Menu simples
+if __name__ == "__main__":
+    print("\n🚀 NÉBULA CLOUD TRACKER SIMPLE - Teste Real")
+    print("1 - Distribuir arquivo (envia fragmentos)")
+    print("2 - Ver nós online")
+    op = input("\nEscolha: ")
+    if op == "1":
+        caminho = input("Caminho do arquivo para testar (ex: teste.txt): ")
+        senha = input("Senha de criptografia: ")
+        distribuir_arquivo(caminho, senha)
+    elif op == "2":
+        verificar_nos()
