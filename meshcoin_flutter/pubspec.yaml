@@ -1,6 +1,6 @@
 name: meshcoin_app
-description: Aplicativo MeshCoin P2P
-version: 1.0.0+1
+description: MeshCoin - Rede Mesh Híbrida P2P | Criptomoeda Off-Grid
+version: 2.0.0+2
 environment:
   sdk: '>=3.0.0 <4.0.0'
 
@@ -8,6 +8,13 @@ dependencies:
   flutter:
     sdk: flutter
   crypto: ^3.0.3
+  pointycastle: ^3.9.1
+  qr_flutter: ^4.1.0
+  google_fonts: ^6.2.1
+  shared_preferences: ^2.3.5
+  intl: ^0.19.0
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/images/

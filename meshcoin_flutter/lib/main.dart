@@ -1,151 +1,404 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'theme/app_theme.dart';
 import 'mesh_node.dart';
+import 'crypto/wallet_crypto.dart';
+import 'tunneling/mesh_tunnel.dart';
+import 'screens/home_screen.dart';
+import 'screens/wallet_screen.dart';
+import 'screens/messenger_screen.dart';
+import 'screens/mining_screen.dart';
+import 'screens/network_screen.dart';
 
 void main() {
-  runApp(MeshCoinApp());
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const MeshCoinApp());
 }
 
 class MeshCoinApp extends StatelessWidget {
+  const MeshCoinApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'MeshCoin',
-      theme: ThemeData.dark().copyWith(
-        primaryColor: Colors.blueAccent,
-        scaffoldBackgroundColor: Color(0xFF121212),
-      ),
-      home: MeshCoinHome(),
+      debugShowCheckedModeBanner: false,
+      theme: MeshTheme.darkTheme,
+      home: const SplashScreen(),
     );
   }
 }
 
-class MeshCoinHome extends StatefulWidget {
+/// ═══════════════════════════════════════════════════════════════
+/// Splash Screen — Loading animado com logo
+/// ═══════════════════════════════════════════════════════════════
+class SplashScreen extends StatefulWidget {
+  const SplashScreen({super.key});
+
   @override
-  _MeshCoinHomeState createState() => _MeshCoinHomeState();
+  State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _MeshCoinHomeState extends State<MeshCoinHome> {
-  int _currentIndex = 0;
-  String myAddress = "Não gerada";
-  
-  late MeshNode meshNode;
-  List<String> chatMessages = [];
-  
-  TextEditingController _chatController = TextEditingController();
-  TextEditingController _destController = TextEditingController();
-  TextEditingController _valorController = TextEditingController();
+class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _fadeIn;
+  late Animation<double> _scaleUp;
 
   @override
   void initState() {
     super.initState();
-    meshNode = MeshNode("AndroidUser_\${Random().nextInt(1000)}");
-    meshNode.onMessage((packet) {
-      if (packet['tipo'] == 'CHAT') {
-        setState(() {
-          chatMessages.add("[\${packet['remetente']}]: \${packet['texto']}");
-        });
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 2000),
+      vsync: this,
+    );
+    _fadeIn = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(parent: _controller, curve: const Interval(0, 0.6, curve: Curves.easeIn)),
+    );
+    _scaleUp = Tween<double>(begin: 0.5, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: const Interval(0, 0.6, curve: Curves.elasticOut)),
+    );
+    _controller.forward();
+
+    Future.delayed(const Duration(milliseconds: 2500), () {
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const MeshCoinShell()),
+        );
       }
     });
-    meshNode.start();
   }
 
-  void gerarCarteira() {
-    setState(() {
-      myAddress = "MESH\${Random().nextInt(999999999)}ABCD";
-    });
-  }
-
-  void enviarPagamento() {
-    if (myAddress == "Não gerada") return;
-    
-    Map<String, dynamic> tx = {
-      "tipo": "TRANSACAO",
-      "remetente": myAddress,
-      "destinatario": _destController.text,
-      "valor": _valorController.text,
-      "timestamp": DateTime.now().millisecondsSinceEpoch,
-    };
-    
-    meshNode.sendRoutedData("BROADCAST", tx);
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Transação enviada para \${meshNode.directPeers.length} nós!'))
-    );
-  }
-
-  void enviarMensagem() {
-    if (_chatController.text.isEmpty) return;
-    
-    Map<String, dynamic> msg = {
-      "tipo": "CHAT",
-      "remetente": "AndroidUser",
-      "texto": _chatController.text
-    };
-    
-    meshNode.sendRoutedData("BROADCAST", msg);
-    setState(() {
-      chatMessages.add("[Você]: \${_chatController.text}");
-      _chatController.clear();
-    });
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('🌐 MeshCoin P2P')),
-      body: _currentIndex == 0 ? _buildCarteira() : _buildChat(),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
-        items: [
-          BottomNavigationBarItem(icon: Icon(Icons.account_balance_wallet), label: 'Carteira'),
-          BottomNavigationBarItem(icon: Icon(Icons.chat), label: 'Chat P2P'),
-        ],
+      backgroundColor: MeshColors.background,
+      body: Center(
+        child: AnimatedBuilder(
+          animation: _controller,
+          builder: (context, child) {
+            return Opacity(
+              opacity: _fadeIn.value,
+              child: Transform.scale(
+                scale: _scaleUp.value,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Logo com glow
+                    Container(
+                      width: 120,
+                      height: 120,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: MeshColors.neonCyan.withOpacity(0.4),
+                            blurRadius: 40,
+                            spreadRadius: 10,
+                          ),
+                          BoxShadow(
+                            color: MeshColors.neonViolet.withOpacity(0.2),
+                            blurRadius: 60,
+                            spreadRadius: 20,
+                          ),
+                        ],
+                      ),
+                      child: ClipOval(
+                        child: Image.asset(
+                          'assets/images/logo.png',
+                          width: 120,
+                          height: 120,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stack) => Container(
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: MeshColors.neonGradient,
+                            ),
+                            child: const Icon(Icons.currency_bitcoin, size: 60, color: MeshColors.background),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Text(
+                      'MeshCoin',
+                      style: GoogleFonts.inter(
+                        color: MeshColors.textPrimary,
+                        fontSize: 32,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    ShaderMask(
+                      shaderCallback: (bounds) => MeshColors.neonGradient.createShader(bounds),
+                      child: Text(
+                        'Camada 0 · Off-Grid · Soberano',
+                        style: GoogleFonts.inter(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 40),
+                    SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation(MeshColors.neonCyan.withOpacity(0.6)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
       ),
     );
   }
+}
 
-  Widget _buildCarteira() {
-    return Padding(
-      padding: EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text("Minha Carteira", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          SizedBox(height: 10),
-          Text(myAddress, style: TextStyle(color: Colors.greenAccent)),
-          SizedBox(height: 10),
-          ElevatedButton(onPressed: gerarCarteira, child: Text("Gerar Nova Carteira")),
-          Divider(height: 40),
-          Text("Enviar Pagamento", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-          TextField(controller: _destController, decoration: InputDecoration(labelText: "Destinatário")),
-          TextField(controller: _valorController, decoration: InputDecoration(labelText: "Valor (MESH)"), keyboardType: TextInputType.number),
-          SizedBox(height: 10),
-          ElevatedButton(onPressed: enviarPagamento, child: Text("Enviar Transação")),
-        ],
-      ),
-    );
+/// ═══════════════════════════════════════════════════════════════
+/// App Shell — 5 Tabs Navigation
+/// ═══════════════════════════════════════════════════════════════
+class MeshCoinShell extends StatefulWidget {
+  const MeshCoinShell({super.key});
+
+  @override
+  State<MeshCoinShell> createState() => _MeshCoinShellState();
+}
+
+class _MeshCoinShellState extends State<MeshCoinShell> {
+  int _currentIndex = 0;
+  String _address = 'Não gerada';
+  String _publicKey = '';
+  String _privateKey = '';
+  double _balance = 0.0;
+
+  late MeshNode meshNode;
+  final MeshTunnelQueue tunnelQueue = MeshTunnelQueue();
+  List<Map<String, dynamic>> transactions = [];
+  List<Map<String, dynamic>> chatMessages = [];
+
+  @override
+  void initState() {
+    super.initState();
+    meshNode = MeshNode('MeshNode_${Random().nextInt(9999)}');
+    meshNode.onMessage(_handleIncomingPacket);
+    meshNode.start();
+    _loadSavedWallet();
   }
 
-  Widget _buildChat() {
-    return Column(
-      children: [
-        Expanded(
-          child: ListView.builder(
-            itemCount: chatMessages.length,
-            itemBuilder: (context, index) => ListTile(title: Text(chatMessages[index])),
+  Future<void> _loadSavedWallet() async {
+    Map<String, String>? saved = await WalletCrypto.loadWallet();
+    if (saved != null) {
+      setState(() {
+        _address = saved['address']!;
+        _publicKey = saved['publicKey']!;
+        _privateKey = saved['privateKey']!;
+      });
+    }
+  }
+
+  void _handleIncomingPacket(Map<String, dynamic> packet) {
+    if (!mounted) return;
+    String tipo = packet['tipo'] ?? '';
+
+    if (tipo == 'CHAT') {
+      setState(() {
+        chatMessages.add({
+          ...packet,
+          'isMine': false,
+        });
+      });
+    } else if (tipo == 'TRANSACAO') {
+      setState(() {
+        transactions.add(packet);
+        if (packet['destinatario'] == _address) {
+          _balance += double.tryParse(packet['valor']?.toString() ?? '0') ?? 0;
+        }
+      });
+    }
+  }
+
+  void _onWalletGenerated(Map<String, String> wallet) {
+    setState(() {
+      _address = wallet['address']!;
+      _publicKey = wallet['publicKey']!;
+      _privateKey = wallet['privateKey']!;
+      _balance = 50.0; // Reward de criação (simulação)
+    });
+  }
+
+  void _onSendPayment(String dest, String valor) {
+    if (_address == 'Não gerada') return;
+
+    // Assinar a transação com criptografia real
+    String txData = '$_address:$dest:$valor:${DateTime.now().millisecondsSinceEpoch}';
+    String signature = WalletCrypto.signTransaction(_privateKey, txData);
+
+    Map<String, dynamic> tx = {
+      'tipo': 'TRANSACAO',
+      'remetente': _address,
+      'destinatario': dest,
+      'valor': valor,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+      'signature': signature,
+    };
+
+    meshNode.sendRoutedData('BROADCAST', tx);
+
+    setState(() {
+      transactions.add(tx);
+      double v = double.tryParse(valor) ?? 0;
+      _balance -= v;
+    });
+  }
+
+  void _onSendMessage(String text) {
+    Map<String, dynamic> msg = {
+      'tipo': 'CHAT',
+      'remetente': _address.length > 12 ? _address.substring(0, 12) : _address,
+      'texto': text,
+    };
+    meshNode.sendRoutedData('BROADCAST', msg);
+
+    setState(() {
+      chatMessages.add({
+        ...msg,
+        'isMine': true,
+      });
+    });
+  }
+
+  String get _appBarTitle {
+    switch (_currentIndex) {
+      case 0: return '🌐 MeshCoin';
+      case 1: return '💰 Carteira';
+      case 2: return '💬 Messenger';
+      case 3: return '⛏️ Mineração';
+      case 4: return '🛰️ Rede';
+      default: return 'MeshCoin';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      extendBody: true,
+      appBar: AppBar(
+        title: Text(_appBarTitle),
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              colors: [MeshColors.background, MeshColors.surface],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
           ),
         ),
-        Padding(
-          padding: EdgeInsets.all(8),
-          child: Row(
-            children: [
-              Expanded(child: TextField(controller: _chatController, decoration: InputDecoration(hintText: "Mensagem..."))),
-              IconButton(icon: Icon(Icons.send), onPressed: enviarMensagem),
-            ],
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: StatusDot(
+              color: meshNode.directPeers.isEmpty ? MeshColors.neonRed : MeshColors.neonGreen,
+              label: meshNode.directPeers.isEmpty ? 'Offline' : '${meshNode.directPeers.length} nós',
+            ),
           ),
-        )
-      ],
+        ],
+      ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: MeshColors.darkGradient,
+        ),
+        child: IndexedStack(
+          index: _currentIndex,
+          children: [
+            HomeScreen(
+              meshNode: meshNode,
+              address: _address,
+              balance: _balance,
+              tunnelQueue: tunnelQueue,
+              recentTransactions: transactions,
+            ),
+            WalletScreen(
+              meshNode: meshNode,
+              address: _address,
+              balance: _balance,
+              onWalletGenerated: _onWalletGenerated,
+              onSendPayment: _onSendPayment,
+              transactions: transactions,
+            ),
+            MessengerScreen(
+              meshNode: meshNode,
+              myAddress: _address,
+              messages: chatMessages,
+              onSendMessage: _onSendMessage,
+            ),
+            const MiningScreen(),
+            NetworkScreen(
+              meshNode: meshNode,
+              tunnelQueue: tunnelQueue,
+            ),
+          ],
+        ),
+      ),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: MeshColors.surface,
+          border: Border(
+            top: BorderSide(color: MeshColors.neonCyan.withOpacity(0.1), width: 1),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: MeshColors.neonCyan.withOpacity(0.05),
+              blurRadius: 20,
+              offset: const Offset(0, -5),
+            ),
+          ],
+        ),
+        child: BottomNavigationBar(
+          currentIndex: _currentIndex,
+          onTap: (index) => setState(() => _currentIndex = index),
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.dashboard),
+              activeIcon: Icon(Icons.dashboard, size: 28),
+              label: 'Home',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.account_balance_wallet_outlined),
+              activeIcon: Icon(Icons.account_balance_wallet, size: 28),
+              label: 'Carteira',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.forum_outlined),
+              activeIcon: Icon(Icons.forum, size: 28),
+              label: 'Chat',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.memory),
+              activeIcon: Icon(Icons.memory, size: 28),
+              label: 'Minerar',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.hub_outlined),
+              activeIcon: Icon(Icons.hub, size: 28),
+              label: 'Rede',
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

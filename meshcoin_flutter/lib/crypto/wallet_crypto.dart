@@ -1,0 +1,201 @@
+import 'dart:convert';
+import 'dart:math';
+import 'dart:typed_data';
+import 'package:crypto/crypto.dart';
+import 'package:pointycastle/export.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+/// ═══════════════════════════════════════════════════════════════
+/// MeshCoin Wallet Crypto — Real ECDSA secp256k1 + Base58Check
+/// ═══════════════════════════════════════════════════════════════
+
+class WalletCrypto {
+  static final ECDomainParameters _params = ECDomainParameters('secp256k1');
+
+  /// Gera um par de chaves ECDSA real usando entropia criptográfica
+  static Map<String, String> generateKeypair() {
+    final secureRandom = _getSecureRandom();
+    final keyGen = ECKeyGenerator()
+      ..init(ParametersWithRandom(
+        ECKeyGeneratorParameters(_params),
+        secureRandom,
+      ));
+
+    final keyPair = keyGen.generateKeyPair();
+    final privateKey = keyPair.privateKey as ECPrivateKey;
+    final publicKey = keyPair.publicKey as ECPublicKey;
+
+    // Chave privada em hex (32 bytes)
+    String privateHex = privateKey.d!.toRadixString(16).padLeft(64, '0');
+
+    // Chave pública comprimida (33 bytes)
+    String publicHex = _compressPublicKey(publicKey.Q!);
+
+    // Gerar endereço MeshCoin: MESH + Base58Check(RIPEMD160(SHA256(pubkey)))
+    String address = _generateAddress(publicHex);
+
+    return {
+      'privateKey': privateHex,
+      'publicKey': publicHex,
+      'address': address,
+    };
+  }
+
+  /// Gera o endereço MeshCoin a partir da chave pública
+  static String _generateAddress(String publicKeyHex) {
+    Uint8List pubKeyBytes = _hexToBytes(publicKeyHex);
+
+    // SHA-256
+    var sha256Hash = sha256.convert(pubKeyBytes).bytes;
+
+    // RIPEMD-160
+    final ripemd160 = Digest('RIPEMD-160');
+    Uint8List ripemdHash = ripemd160.process(Uint8List.fromList(sha256Hash));
+
+    // Adiciona version byte (0x4D = 'M' para MeshCoin)
+    Uint8List versionedPayload = Uint8List(1 + ripemdHash.length);
+    versionedPayload[0] = 0x4D; // Version byte MeshCoin
+    versionedPayload.setRange(1, versionedPayload.length, ripemdHash);
+
+    // Checksum: primeiros 4 bytes de SHA256(SHA256(versionedPayload))
+    var firstHash = sha256.convert(versionedPayload).bytes;
+    var secondHash = sha256.convert(firstHash).bytes;
+    Uint8List checksum = Uint8List.fromList(secondHash.sublist(0, 4));
+
+    // Payload final
+    Uint8List addressBytes = Uint8List(versionedPayload.length + checksum.length);
+    addressBytes.setRange(0, versionedPayload.length, versionedPayload);
+    addressBytes.setRange(versionedPayload.length, addressBytes.length, checksum);
+
+    // Base58 encode
+    String base58Address = _base58Encode(addressBytes);
+
+    return 'MESH$base58Address';
+  }
+
+  /// Comprime a chave pública EC (formato 33 bytes)
+  static String _compressPublicKey(ECPoint point) {
+    BigInt x = point.x!.toBigInteger()!;
+    BigInt y = point.y!.toBigInteger()!;
+    int prefix = y.isEven ? 0x02 : 0x03;
+    String xHex = x.toRadixString(16).padLeft(64, '0');
+    return prefix.toRadixString(16).padLeft(2, '0') + xHex;
+  }
+
+  /// Assina uma transação com a chave privada ECDSA
+  static String signTransaction(String privateKeyHex, String txData) {
+    BigInt privateKeyInt = BigInt.parse(privateKeyHex, radix: 16);
+    ECPrivateKey privateKey = ECPrivateKey(privateKeyInt, _params);
+
+    // Hash da transação
+    var txHash = sha256.convert(utf8.encode(txData)).bytes;
+
+    // Assinar com ECDSA
+    final signer = ECDSASigner(SHA256Digest());
+    signer.init(true, PrivateKeyParameter<ECPrivateKey>(privateKey));
+
+    ECSignature signature = signer.generateSignature(Uint8List.fromList(txHash)) as ECSignature;
+
+    String r = signature.r.toRadixString(16).padLeft(64, '0');
+    String s = signature.s.toRadixString(16).padLeft(64, '0');
+
+    return '$r$s';
+  }
+
+  /// Verifica uma assinatura ECDSA
+  static bool verifySignature(String publicKeyHex, String txData, String signatureHex) {
+    try {
+      Uint8List pubKeyBytes = _hexToBytes(publicKeyHex);
+      ECPoint? point = _params.curve.decodePoint(pubKeyBytes);
+      if (point == null) return false;
+
+      ECPublicKey publicKey = ECPublicKey(point, _params);
+      var txHash = sha256.convert(utf8.encode(txData)).bytes;
+
+      String rHex = signatureHex.substring(0, 64);
+      String sHex = signatureHex.substring(64);
+      ECSignature sig = ECSignature(
+        BigInt.parse(rHex, radix: 16),
+        BigInt.parse(sHex, radix: 16),
+      );
+
+      final verifier = ECDSASigner(SHA256Digest());
+      verifier.init(false, PublicKeyParameter<ECPublicKey>(publicKey));
+
+      return verifier.verifySignature(Uint8List.fromList(txHash), sig);
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // ─── Persistência Local ───
+
+  static Future<void> saveWallet(Map<String, String> wallet) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('mesh_privateKey', wallet['privateKey']!);
+    await prefs.setString('mesh_publicKey', wallet['publicKey']!);
+    await prefs.setString('mesh_address', wallet['address']!);
+  }
+
+  static Future<Map<String, String>?> loadWallet() async {
+    final prefs = await SharedPreferences.getInstance();
+    String? privateKey = prefs.getString('mesh_privateKey');
+    String? publicKey = prefs.getString('mesh_publicKey');
+    String? address = prefs.getString('mesh_address');
+
+    if (privateKey != null && publicKey != null && address != null) {
+      return {
+        'privateKey': privateKey,
+        'publicKey': publicKey,
+        'address': address,
+      };
+    }
+    return null;
+  }
+
+  // ─── Utilitários ───
+
+  static SecureRandom _getSecureRandom() {
+    final secureRandom = FortunaRandom();
+    final random = Random.secure();
+    final seeds = List<int>.generate(32, (_) => random.nextInt(256));
+    secureRandom.seed(KeyParameter(Uint8List.fromList(seeds)));
+    return secureRandom;
+  }
+
+  static Uint8List _hexToBytes(String hex) {
+    List<int> bytes = [];
+    for (int i = 0; i < hex.length; i += 2) {
+      bytes.add(int.parse(hex.substring(i, i + 2), radix: 16));
+    }
+    return Uint8List.fromList(bytes);
+  }
+
+  static const String _base58Alphabet =
+      '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+
+  static String _base58Encode(Uint8List bytes) {
+    BigInt intData = BigInt.zero;
+    for (int byte in bytes) {
+      intData = (intData << 8) | BigInt.from(byte);
+    }
+
+    String result = '';
+    while (intData > BigInt.zero) {
+      BigInt remainder = intData % BigInt.from(58);
+      intData = intData ~/ BigInt.from(58);
+      result = _base58Alphabet[remainder.toInt()] + result;
+    }
+
+    // Adiciona '1' para cada byte zero no início
+    for (int byte in bytes) {
+      if (byte == 0) {
+        result = '1$result';
+      } else {
+        break;
+      }
+    }
+
+    return result;
+  }
+}

@@ -21,7 +21,7 @@
     },
     {
       "name": "flutter",
-      "rootUri": "file:///C:/Users/ferre/Downloads/flutter_windows_3.44.8-stable/flutter/packages/flutter",
+      "rootUri": "file:///C:/Users/ferre/flutter/packages/flutter",
       "packageUri": "lib/",
       "languageVersion": "3.10"
     },
@@ -39,7 +39,7 @@
     },
     {
       "name": "sky_engine",
-      "rootUri": "file:///C:/Users/ferre/Downloads/flutter_windows_3.44.8-stable/flutter/bin/cache/pkg/sky_engine",
+      "rootUri": "file:///C:/Users/ferre/flutter/bin/cache/pkg/sky_engine",
       "packageUri": "lib/",
       "languageVersion": "3.10"
     },
@@ -64,7 +64,7 @@
   ],
   "generator": "pub",
   "generatorVersion": "3.12.2",
-  "flutterRoot": "file:///C:/Users/ferre/Downloads/flutter_windows_3.44.8-stable/flutter",
+  "flutterRoot": "file:///C:/Users/ferre/flutter",
   "flutterVersion": "3.44.8",
   "pubCache": "file:///C:/Users/ferre/AppData/Local/Pub/Cache"
 }
