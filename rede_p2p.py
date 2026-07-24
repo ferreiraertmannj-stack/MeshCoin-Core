@@ -75,6 +75,7 @@ class MeshNode:
 
     def _tcp_listener(self):
         """Escuta conexões TCP para receber dados (transações, blocos, chat)"""
+        global TCP_PORT
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         
         # Tenta conectar na porta padrão. Se estiver em uso, tenta a próxima
@@ -88,7 +89,6 @@ class MeshNode:
                 
         server.listen(5)
         # Atualiza a porta TCP real que estamos usando
-        global TCP_PORT
         TCP_PORT = porta
         
         while self.running:

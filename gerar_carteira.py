@@ -1,36 +1,28 @@
-import hashlib
-import secrets
 import time
 import os
+from crypto_core import HybridCrypto
 
-def gerar_carteira_v2():
-    print("--- 🔐 GERADOR DE CARTEIRA MESHCOIN V2 (Windows Compatible) ---")
+def gerar_carteira_hibrida():
+    print("--- 🔐 GERADOR DE CARTEIRA MESHCOIN V3 (Hybrid Crypto) ---")
     
-    # 1. Gera a Chave Privada
-    private_key = secrets.token_hex(32)
+    # Gera o par de chaves usando o novo Core Híbrido
+    carteira = HybridCrypto.generate_keypair()
     
-    # 2. Gera a Chave Pública
-    public_key_raw = f"Pub_Key_From_{private_key}"
-    public_key = hashlib.sha256(public_key_raw.encode()).hexdigest()
+    address = carteira['address']
+    print(f"\n✅ Carteira Híbrida Gerada com Sucesso!")
+    print(f"🌍 Endereço (Público): {address}")
     
-    # 3. Gera o Endereço (Usando SHA256 para garantir compatibilidade no Windows)
-    # Pegamos os primeiros 40 caracteres para ficar parecido com um endereço real
-    address_hash = hashlib.sha256(public_key.encode()).hexdigest()
-    wallet_address = f"MESH{address_hash[:40]}"
-    
-    print("\n✅ Carteira Gerada com Sucesso!")
-    print(f"🌍 Endereço: {wallet_address}")
-    
-    # 4. Salva no Arquivo (Agora garantido!)
-    nome_arquivo = f"carteira_{wallet_address[:8]}.txt"
+    # Salva no Arquivo
+    nome_arquivo = f"carteira_{address[:8]}.txt"
     
     try:
         with open(nome_arquivo, "w") as f:
-            f.write("--- MESHCOIN PAPER WALLET ---\n")
+            f.write("--- MESHCOIN HYBRID WALLET ---\n")
             f.write(f"Data de Criação: {time.ctime()}\n")
             f.write("-" * 30 + "\n")
-            f.write(f"Private Key (SEGREDO): {private_key}\n")
-            f.write(f"Public Address (COMPARTILHE): {wallet_address}\n")
+            f.write(f"Endereço Público: {address}\n")
+            f.write(f"Private Key ECDSA: \n{carteira['private_ecdsa']}\n")
+            f.write(f"Private Seed PQC: {carteira['private_pqc_seed']}\n")
             f.write("-" * 30 + "\n")
             f.write("GUARDE ESTE ARQUIVO EM LOCAL SEGURO!")
             
@@ -41,5 +33,4 @@ def gerar_carteira_v2():
         print(f"\n❌ Erro ao salvar arquivo: {e}")
 
 if __name__ == "__main__":
-    gerar_carteira_v2()
-    input("\nPressione Enter para sair...")
+    gerar_carteira_hibrida()
