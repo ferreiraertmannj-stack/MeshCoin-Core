@@ -5,6 +5,9 @@ import 'theme/app_theme.dart';
 import 'mesh_node.dart';
 import 'crypto/wallet_crypto.dart';
 import 'tunneling/mesh_tunnel.dart';
+import 'blockchain/ledger.dart';
+import 'blockchain/transaction.dart';
+import 'blockchain/block.dart';
 import 'screens/home_screen.dart';
 import 'screens/wallet_screen.dart';
 import 'screens/messenger_screen.dart';
@@ -183,21 +186,29 @@ class _MeshCoinShellState extends State<MeshCoinShell> {
   String _address = 'Não gerada';
   String _publicKey = '';
   String _privateKey = '';
-  double _balance = 0.0;
-
+  
   late MeshNode meshNode;
   final MeshTunnelQueue tunnelQueue = MeshTunnelQueue();
   List<Map<String, dynamic>> transactions = [];
   List<Map<String, dynamic>> chatMessages = [];
+  
+  late Ledger ledger;
 
   @override
   void initState() {
     super.initState();
+    ledger = Ledger();
+    ledger.addListener(() {
+      if (mounted) setState(() {});
+    });
+
     meshNode = MeshNode('MeshNode_${Random().nextInt(9999)}');
     meshNode.onMessage(_handleIncomingPacket);
     meshNode.start();
     _loadSavedWallet();
   }
+
+  double get _balance => ledger.getBalanceOfAddress(_address);
 
   Future<void> _loadSavedWallet() async {
     Map<String, String>? saved = await WalletCrypto.loadWallet();
@@ -221,13 +232,27 @@ class _MeshCoinShellState extends State<MeshCoinShell> {
           'isMine': false,
         });
       });
-    } else if (tipo == 'TRANSACAO') {
-      setState(() {
-        transactions.add(packet);
-        if (packet['destinatario'] == _address) {
-          _balance += double.tryParse(packet['valor']?.toString() ?? '0') ?? 0;
+    } else if (tipo == 'NEW_TRANSACTION') {
+      try {
+        var tx = Transaction.fromJson(packet['tx']);
+        bool added = ledger.addTransaction(tx);
+        if (added) {
+          transactions.add({
+            'remetente': tx.senderAddress,
+            'destinatario': tx.receiverAddress,
+            'valor': tx.amount,
+          });
         }
-      });
+      } catch (e) {
+        print("Erro ao processar transação: $e");
+      }
+    } else if (tipo == 'NEW_BLOCK') {
+      try {
+        var block = Block.fromJson(packet['block']);
+        ledger.receiveBlock(block);
+      } catch (e) {
+        print("Erro ao processar bloco: $e");
+      }
     }
   }
 
@@ -236,33 +261,43 @@ class _MeshCoinShellState extends State<MeshCoinShell> {
       _address = wallet['address']!;
       _publicKey = wallet['publicKey']!;
       _privateKey = wallet['privateKey']!;
-      _balance = 50.0; // Reward de criação (simulação)
     });
   }
 
   void _onSendPayment(String dest, String valor) {
     if (_address == 'Não gerada') return;
 
-    // Assinar a transação com criptografia real
-    String txData = '$_address:$dest:$valor:${DateTime.now().millisecondsSinceEpoch}';
-    String signature = WalletCrypto.signTransaction(_privateKey, txData);
+    double amount = double.tryParse(valor) ?? 0.0;
+    if (amount <= 0) return;
 
-    Map<String, dynamic> tx = {
-      'tipo': 'TRANSACAO',
-      'remetente': _address,
-      'destinatario': dest,
-      'valor': valor,
-      'timestamp': DateTime.now().millisecondsSinceEpoch,
-      'signature': signature,
-    };
+    // Criar e assinar a transação
+    Transaction tx = Transaction.create(
+      senderPubKey: _publicKey,
+      senderAddress: _address,
+      privateKeyHex: _privateKey,
+      receiverAddress: dest,
+      amount: amount,
+    );
 
-    meshNode.sendRoutedData('BROADCAST', tx);
+    // Tenta adicionar localmente primeiro
+    bool added = ledger.addTransaction(tx);
+    
+    if (added) {
+      // Broadcast para os nós
+      Map<String, dynamic> packet = {
+        'tipo': 'NEW_TRANSACTION',
+        'tx': tx.toJson(),
+      };
+      meshNode.sendRoutedData('BROADCAST', packet);
 
-    setState(() {
-      transactions.add(tx);
-      double v = double.tryParse(valor) ?? 0;
-      _balance -= v;
-    });
+      setState(() {
+        transactions.add({
+          'remetente': tx.senderAddress,
+          'destinatario': tx.receiverAddress,
+          'valor': tx.amount,
+        });
+      });
+    }
   }
 
   void _onSendMessage(String text) {
@@ -345,7 +380,11 @@ class _MeshCoinShellState extends State<MeshCoinShell> {
               messages: chatMessages,
               onSendMessage: _onSendMessage,
             ),
-            const MiningScreen(),
+            MiningScreen(
+              ledger: ledger,
+              minerAddress: _address,
+              meshNode: meshNode,
+            ),
             NetworkScreen(
               meshNode: meshNode,
               tunnelQueue: tunnelQueue,

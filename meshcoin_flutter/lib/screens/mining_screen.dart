@@ -3,9 +3,20 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
+import '../blockchain/ledger.dart';
+import '../mesh_node.dart';
 
 class MiningScreen extends StatefulWidget {
-  const MiningScreen({super.key});
+  final Ledger ledger;
+  final String minerAddress;
+  final MeshNode meshNode;
+
+  const MiningScreen({
+    super.key,
+    required this.ledger,
+    required this.minerAddress,
+    required this.meshNode,
+  });
 
   @override
   State<MiningScreen> createState() => _MiningScreenState();
@@ -45,45 +56,89 @@ class _MiningScreenState extends State<MiningScreen> with TickerProviderStateMix
   }
 
   void _toggleMining() {
+    if (widget.minerAddress == 'Não gerada') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Gere uma carteira primeiro!')),
+      );
+      return;
+    }
+
     setState(() {
       _isMining = !_isMining;
     });
 
     if (_isMining) {
       _pulseController.repeat(reverse: true);
-      _scratchpadMB = 64.0; // Simulação: 64MB de RAM alocado
-
-      // Simular mineração
-      _miningTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
-        if (!mounted) return;
-        setState(() {
-          final rng = Random();
-          _hashRate = 120 + rng.nextDouble() * 80; // 120-200 H/s (ARM realistic)
-          _totalHashes += (_hashRate * 0.5).round();
-          
-          // Gerar hash aleatório visual
-          _currentHash = List.generate(64, (_) => rng.nextInt(16).toRadixString(16)).join();
-          
-          // Chance de encontrar bloco (simulação)
-          if (rng.nextInt(120) == 0) {
-            _blocksFound++;
-          }
-        });
-      });
+      _scratchpadMB = 64.0; // NeonHash RAM footprint sim
 
       _uptimeTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
         if (!mounted) return;
-        setState(() {
-          _uptime += const Duration(seconds: 1);
-        });
+        setState(() => _uptime += const Duration(seconds: 1));
       });
+
+      _mineLoop();
     } else {
       _pulseController.stop();
       _miningTimer?.cancel();
       _uptimeTimer?.cancel();
-      setState(() {
-        _hashRate = 0;
-      });
+      setState(() => _hashRate = 0);
+    }
+  }
+
+  Future<void> _mineLoop() async {
+    while (_isMining && mounted) {
+      // Pequena pausa para a UI respirar e pegar blocos/transações que chegam
+      await Future.delayed(const Duration(milliseconds: 500));
+      if (!_isMining || !mounted) break;
+
+      int t0 = DateTime.now().millisecondsSinceEpoch;
+      int hashesDone = 0;
+
+      // Chama a mineração real do ledger (síncrona na UI, por isso blocos vazios ou diff alta podem travar)
+      // Como diff=3 é rápido (média de 4096 hashes), roda quase instantâneo.
+      var newBlock = widget.ledger.minePendingTransactions(
+        widget.minerAddress,
+        onProgress: (h) {
+          hashesDone = h;
+          if (mounted) {
+            setState(() {
+              _currentHash = List.generate(64, (_) => Random().nextInt(16).toRadixString(16)).join();
+            });
+          }
+        },
+      );
+
+      int dt = DateTime.now().millisecondsSinceEpoch - t0;
+
+      if (newBlock != null && mounted) {
+        setState(() {
+          _blocksFound++;
+          _totalHashes += hashesDone;
+          _hashRate = (hashesDone / max(1, dt)) * 1000;
+          _currentHash = newBlock.hash;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Bloco #${newBlock.index} minerado! Recompensa recebida.'),
+            backgroundColor: MeshColors.neonGreen,
+          ),
+        );
+
+        // Broadcast o novo bloco na rede Mesh!
+        widget.meshNode.sendRoutedData('BROADCAST', {
+          'tipo': 'NEW_BLOCK',
+          'block': newBlock.toJson(),
+        });
+      } else {
+        // Se a mempool estiver vazia, apenas roda um hashing "dummy" para mostrar a visualização de poder
+        setState(() {
+          final rng = Random();
+          _hashRate = 120 + rng.nextDouble() * 80; // H/s ARM simulado
+          _totalHashes += (_hashRate * 0.5).round();
+          _currentHash = List.generate(64, (_) => rng.nextInt(16).toRadixString(16)).join();
+        });
+      }
     }
   }
 
