@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
-import 'package:pointycastle/export.dart';
+import 'package:pointycastle/export.dart' as pc;
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// ═══════════════════════════════════════════════════════════════
@@ -10,20 +10,20 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// ═══════════════════════════════════════════════════════════════
 
 class WalletCrypto {
-  static final ECDomainParameters _params = ECDomainParameters('secp256k1');
+  static final pc.ECDomainParameters _params = pc.ECDomainParameters('secp256k1');
 
   /// Gera um par de chaves ECDSA real usando entropia criptográfica
   static Map<String, String> generateKeypair() {
     final secureRandom = _getSecureRandom();
-    final keyGen = ECKeyGenerator()
-      ..init(ParametersWithRandom(
-        ECKeyGeneratorParameters(_params),
+    final keyGen = pc.ECKeyGenerator()
+      ..init(pc.ParametersWithRandom(
+        pc.ECKeyGeneratorParameters(_params),
         secureRandom,
       ));
 
     final keyPair = keyGen.generateKeyPair();
-    final privateKey = keyPair.privateKey as ECPrivateKey;
-    final publicKey = keyPair.publicKey as ECPublicKey;
+    final privateKey = keyPair.privateKey as pc.ECPrivateKey;
+    final publicKey = keyPair.publicKey as pc.ECPublicKey;
 
     // Chave privada em hex (32 bytes)
     String privateHex = privateKey.d!.toRadixString(16).padLeft(64, '0');
@@ -49,7 +49,7 @@ class WalletCrypto {
     var sha256Hash = sha256.convert(pubKeyBytes).bytes;
 
     // RIPEMD-160
-    final ripemd160 = Digest('RIPEMD-160');
+    final ripemd160 = pc.Digest('RIPEMD-160');
     Uint8List ripemdHash = ripemd160.process(Uint8List.fromList(sha256Hash));
 
     // Adiciona version byte (0x4D = 'M' para MeshCoin)
@@ -74,7 +74,7 @@ class WalletCrypto {
   }
 
   /// Comprime a chave pública EC (formato 33 bytes)
-  static String _compressPublicKey(ECPoint point) {
+  static String _compressPublicKey(pc.ECPoint point) {
     BigInt x = point.x!.toBigInteger()!;
     BigInt y = point.y!.toBigInteger()!;
     int prefix = y.isEven ? 0x02 : 0x03;
@@ -85,16 +85,16 @@ class WalletCrypto {
   /// Assina uma transação com a chave privada ECDSA
   static String signTransaction(String privateKeyHex, String txData) {
     BigInt privateKeyInt = BigInt.parse(privateKeyHex, radix: 16);
-    ECPrivateKey privateKey = ECPrivateKey(privateKeyInt, _params);
+    pc.ECPrivateKey privateKey = pc.ECPrivateKey(privateKeyInt, _params);
 
     // Hash da transação
     var txHash = sha256.convert(utf8.encode(txData)).bytes;
 
     // Assinar com ECDSA
-    final signer = ECDSASigner(SHA256Digest());
-    signer.init(true, PrivateKeyParameter<ECPrivateKey>(privateKey));
+    final signer = pc.ECDSASigner(pc.SHA256Digest());
+    signer.init(true, pc.PrivateKeyParameter<pc.ECPrivateKey>(privateKey));
 
-    ECSignature signature = signer.generateSignature(Uint8List.fromList(txHash)) as ECSignature;
+    pc.ECSignature signature = signer.generateSignature(Uint8List.fromList(txHash)) as pc.ECSignature;
 
     String r = signature.r.toRadixString(16).padLeft(64, '0');
     String s = signature.s.toRadixString(16).padLeft(64, '0');
@@ -106,21 +106,21 @@ class WalletCrypto {
   static bool verifySignature(String publicKeyHex, String txData, String signatureHex) {
     try {
       Uint8List pubKeyBytes = _hexToBytes(publicKeyHex);
-      ECPoint? point = _params.curve.decodePoint(pubKeyBytes);
+      pc.ECPoint? point = _params.curve.decodePoint(pubKeyBytes);
       if (point == null) return false;
 
-      ECPublicKey publicKey = ECPublicKey(point, _params);
+      pc.ECPublicKey publicKey = pc.ECPublicKey(point, _params);
       var txHash = sha256.convert(utf8.encode(txData)).bytes;
 
       String rHex = signatureHex.substring(0, 64);
       String sHex = signatureHex.substring(64);
-      ECSignature sig = ECSignature(
+      pc.ECSignature sig = pc.ECSignature(
         BigInt.parse(rHex, radix: 16),
         BigInt.parse(sHex, radix: 16),
       );
 
-      final verifier = ECDSASigner(SHA256Digest());
-      verifier.init(false, PublicKeyParameter<ECPublicKey>(publicKey));
+      final verifier = pc.ECDSASigner(pc.SHA256Digest());
+      verifier.init(false, pc.PublicKeyParameter<pc.ECPublicKey>(publicKey));
 
       return verifier.verifySignature(Uint8List.fromList(txHash), sig);
     } catch (e) {
@@ -155,11 +155,11 @@ class WalletCrypto {
 
   // ─── Utilitários ───
 
-  static SecureRandom _getSecureRandom() {
-    final secureRandom = FortunaRandom();
+  static pc.SecureRandom _getSecureRandom() {
+    final secureRandom = pc.FortunaRandom();
     final random = Random.secure();
     final seeds = List<int>.generate(32, (_) => random.nextInt(256));
-    secureRandom.seed(KeyParameter(Uint8List.fromList(seeds)));
+    secureRandom.seed(pc.KeyParameter(Uint8List.fromList(seeds)));
     return secureRandom;
   }
 
