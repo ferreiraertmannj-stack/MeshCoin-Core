@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:async';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'batman_router.dart';
+import 'network/nearby_service.dart';
 
 class MeshNode {
   static const int udpPort = 5555;
@@ -12,6 +13,7 @@ class MeshNode {
   final String nodeName;
   final Set<String> directPeers = {}; // Vizinhos de um pulo (Diretos)
   late BatmanRouter router;
+  late NearbyService nearbyService;
   
   String? myIpAddress;
   
@@ -26,11 +28,24 @@ class MeshNode {
 
   MeshNode(this.nodeName) {
     router = BatmanRouter(nodeName);
+    nearbyService = NearbyService(nodeName);
+    
+    // Conecta o recebimento via Nearby (BLE) aos callbacks principais
+    nearbyService.onDataReceived = (data) {
+      for (var cb in onMessageCallbacks) {
+        cb(data);
+      }
+    };
   }
 
   Future<void> start() async {
     isRunning = true;
     await _detectMyIp();
+    
+    // Inicia a camada Nearby (BLE + Wi-Fi Direct)
+    await nearbyService.start();
+    
+    // Inicia a camada UDP/TCP (Hotspot/LAN)
     _startUdpListener();
     _startUdpBroadcaster();
     _startTcpListener();
@@ -214,6 +229,11 @@ class MeshNode {
       "final_destination": finalDestination,
       "payload": payload,
     };
+    
+    // Sempre envia também para a rede BLE/Wi-Fi Direct offline
+    try {
+      nearbyService.broadcastData(packet);
+    } catch(e) {}
     
     if (finalDestination == "BROADCAST") {
       _sendToAllDirectPeers(packet);
