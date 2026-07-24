@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:convert';
 import 'dart:async';
+import 'package:network_info_plus/network_info_plus.dart';
 import 'batman_router.dart';
 
 class MeshNode {
@@ -11,6 +12,8 @@ class MeshNode {
   final String nodeName;
   final Set<String> directPeers = {}; // Vizinhos de um pulo (Diretos)
   late BatmanRouter router;
+  
+  String? myIpAddress;
   
   bool isBridgeNode = false; // Se for True, esse celular tem acesso 4G/Wi-Fi On-Grid
   final String globalServerUrl = "http://meshcoin.global/api/sync"; 
@@ -27,10 +30,21 @@ class MeshNode {
 
   Future<void> start() async {
     isRunning = true;
+    await _detectMyIp();
     _startUdpListener();
     _startUdpBroadcaster();
     _startTcpListener();
     _startOgmBroadcaster(); // B.A.T.M.A.N OGM
+  }
+
+  Future<void> _detectMyIp() async {
+    try {
+      final info = NetworkInfo();
+      myIpAddress = await info.getWifiIP();
+      print("Meu IP local: $myIpAddress");
+    } catch (e) {
+      print("Erro ao obter IP: $e");
+    }
   }
 
   void stop() {
@@ -47,6 +61,9 @@ class MeshNode {
     try {
       _udpSocket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, udpPort);
       _udpSocket?.broadcastEnabled = true;
+      try {
+        _udpSocket?.joinMulticast(InternetAddress("224.0.0.1"));
+      } catch(e) {}
       
       _udpSocket?.listen((RawSocketEvent event) {
         if (event == RawSocketEvent.read) {
@@ -55,6 +72,9 @@ class MeshNode {
             String msg = utf8.decode(dg.data);
             if (msg.startsWith(magicWord)) {
               String ip = dg.address.address;
+              // IGNORAR SE FOR EU MESMO
+              if (ip == myIpAddress || ip == "127.0.0.1") return;
+
               int port = int.parse(msg.split(":")[1]);
               String peerId = "$ip:$port";
               if (!directPeers.contains(peerId)) {
@@ -65,22 +85,59 @@ class MeshNode {
         }
       });
     } catch (e) {
-      print("UDP Listener Error: \$e");
+      print("UDP Listener Error: $e");
     }
   }
 
   Future<void> _startUdpBroadcaster() async {
-    Timer.periodic(Duration(seconds: 5), (timer) {
+    final info = NetworkInfo();
+    
+    Timer.periodic(Duration(seconds: 5), (timer) async {
       if (!isRunning) {
         timer.cancel();
         return;
       }
       try {
-        String msg = "\$magicWord:\$tcpPort";
+        String msg = "$magicWord:$tcpPort";
         List<int> data = utf8.encode(msg);
+        
+        // Em Hotspots Android, 255.255.255.255 geralmente é bloqueado.
+        // O ideal é usar o subnet broadcast, ex: 192.168.43.255
+        String? subnetMask = await info.getWifiSubmask();
+        String broadcastIp = "255.255.255.255";
+        
+        if (myIpAddress != null && subnetMask != null) {
+          try {
+             broadcastIp = _calculateBroadcastAddress(myIpAddress!, subnetMask);
+          } catch(e) {}
+        }
+        
+        // Envia para o Subnet Broadcast (muito mais confiável no Android)
+        _udpSocket?.send(data, InternetAddress(broadcastIp), udpPort);
+        
+        // Como fallback, tenta enviar para o broadcast global e para Multicast
         _udpSocket?.send(data, InternetAddress("255.255.255.255"), udpPort);
-      } catch (e) {}
+        _udpSocket?.send(data, InternetAddress("224.0.0.1"), udpPort);
+      } catch (e) {
+        print("Erro UDP Broadcaster: $e");
+      }
     });
+  }
+
+  String _calculateBroadcastAddress(String ip, String subnet) {
+    List<int> ipParts = ip.split('.').map(int.parse).toList();
+    List<int> subnetParts = subnet.split('.').map(int.parse).toList();
+    
+    if (ipParts.length != 4 || subnetParts.length != 4) return "255.255.255.255";
+    
+    List<int> broadcastParts = [];
+    for (int i = 0; i < 4; i++) {
+      // Inverte a máscara (bitwise NOT) e faz OR com o IP
+      int invertedSubnet = ~subnetParts[i] & 0xFF;
+      broadcastParts.add(ipParts[i] | invertedSubnet);
+    }
+    
+    return broadcastParts.join('.');
   }
 
   /// Inicia o Broadcast de Mensagens OGM do protocolo B.A.T.M.A.N
