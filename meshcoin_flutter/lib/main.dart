@@ -66,10 +66,10 @@ class _MeshCoinHomeState extends State<MeshCoinHome> {
       "timestamp": DateTime.now().millisecondsSinceEpoch,
     };
     
-    meshNode.broadcastData(tx);
+    meshNode.sendRoutedData("BROADCAST", tx);
     
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Transação enviada para \${meshNode.peers.length} nós!'))
+      SnackBar(content: Text('Transação enviada para \${meshNode.directPeers.length} nós!'))
     );
   }
 
@@ -82,7 +82,7 @@ class _MeshCoinHomeState extends State<MeshCoinHome> {
       "texto": _chatController.text
     };
     
-    meshNode.broadcastData(msg);
+    meshNode.sendRoutedData("BROADCAST", msg);
     setState(() {
       chatMessages.add("[Você]: \${_chatController.text}");
       _chatController.clear();

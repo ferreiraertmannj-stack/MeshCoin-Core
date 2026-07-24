@@ -1,0 +1,14 @@
+--- MESHCOIN HYBRID WALLET ---
+Data de Criação: Fri Jul 24 15:59:00 2026
+------------------------------
+Endereço Público: MESHbd0084740e9f97cefa488e36332376c020a5
+Private Key ECDSA: 
+-----BEGIN EC PRIVATE KEY-----
+MHQCAQEEII828TbTCwmoRaAPZW3twGVtmtVfvscfOmJ00pYrcyp2oAcGBSuBBAAKoUQDQgAErPa9
+53ASgaDMWi2h+t70OnengH4wSnEX/e//5u+z79WGQtE6ZVggUcU7geXyhqolFSljACwX2ve/Ge8Y
+5cBdkA==
+-----END EC PRIVATE KEY-----
+
+Private Seed PQC: ff00c0e146104f352479b111dfbf562ba78cbab09f0b80824d278eb52cc84bb5
+------------------------------
+GUARDE ESTE ARQUIVO EM LOCAL SEGURO!
