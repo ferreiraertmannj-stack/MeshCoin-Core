@@ -1,46 +1,36 @@
 import time
 import threading
-import os
-
-ARQUIVO_REDE = "rede_mesh_publica.txt"
-
-def escutar_rede(meu_nome):
-    """
-    Esta função roda em segundo plano (Thread).
-    Ela fica vigiando o arquivo de texto para ver se alguém escreveu algo novo.
-    """
-    if not os.path.exists(ARQUIVO_REDE):
-        with open(ARQUIVO_REDE, "w", encoding="utf-8") as f:
-            f.write("--- INÍCIO DA REDE MESH SIMULADA ---\n")
-
-    # Abre o arquivo e vai para o final dele
-    with open(ARQUIVO_REDE, "r", encoding="utf-8") as f:
-        # Pula para o final do arquivo
-        f.seek(0, 2)
-        
-        while True:
-            linha = f.readline()
-            if linha:
-                # Se a linha não foi escrita por mim, eu mostro na tela
-                if not linha.startswith(f"[{meu_nome}]"):
-                    print(f"\n📨 {linha.strip()}")
-                    print(f"👉 {meu_nome}: ", end="", flush=True) # Restaura o prompt
-            else:
-                time.sleep(0.5) # Espera um pouco antes de checar de novo
+import sys
+from rede_p2p import MeshNode
 
 def iniciar_chat():
     print("==========================================")
-    print("      📡  MESHCOIN P2P CHAT v0.1  📡      ")
+    print("      📡  MESHCOIN P2P CHAT v0.2  📡      ")
     print("==========================================")
     
     meu_nome = input("Digite seu nome (Ex: Loja, Cliente): ").strip()
     print(f"\n✅ Conectado como: {meu_nome}")
-    print("Comece a digitar (ou 'sair' para fechar)...\n")
+    
+    # Inicializa o nó P2P
+    no_p2p = MeshNode(node_name=meu_nome)
+    no_p2p.start()
 
-    # Inicia a "orelha" em paralelo
-    thread_escuta = threading.Thread(target=escutar_rede, args=(meu_nome,))
-    thread_escuta.daemon = True # Morre quando o programa principal fechar
-    thread_escuta.start()
+    def ao_receber_mensagem(pacote):
+        if pacote.get("tipo") == "CHAT":
+            remetente = pacote.get("remetente")
+            texto = pacote.get("texto")
+            if remetente != meu_nome:
+                # Limpa a linha atual, imprime a mensagem e restaura o prompt
+                sys.stdout.write('\r' + ' ' * 50 + '\r')
+                print(f"📨 [{remetente}] diz: {texto}")
+                sys.stdout.write(f"👉 {meu_nome}: ")
+                sys.stdout.flush()
+
+    no_p2p.on_message(ao_receber_mensagem)
+
+    print("Procurando outros nós na rede local (UDP)...")
+    time.sleep(2)
+    print("Comece a digitar (ou 'sair' para fechar)...\n")
 
     # O loop principal (A "boca")
     while True:
@@ -50,9 +40,13 @@ def iniciar_chat():
             break
             
         if mensagem:
-            # Escreve a mensagem no "quadro de avisos" (Arquivo)
-            with open(ARQUIVO_REDE, "a", encoding="utf-8") as f:
-                f.write(f"[{meu_nome}] diz: {mensagem}\n")
+            # Envia para a rede P2P real
+            pacote = {
+                "tipo": "CHAT",
+                "remetente": meu_nome,
+                "texto": mensagem
+            }
+            no_p2p.broadcast_data(pacote)
 
 if __name__ == "__main__":
     iniciar_chat()
