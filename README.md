@@ -60,7 +60,7 @@ O projeto MeshCoin é Open Source e nasceu no Brasil 🇧🇷🌎. Se você é d
 
 - **Desenvolvedor:** Jean Ertmann
 - **E-mail:** ferreiraertmannj@gmail.com
-- **GitHub:** [github.com/SeuUsuario/MeshCoin-Core](https://github.com/SeuUsuario/MeshCoin-Core)
+- **GitHub:** [github.com/SeuUsuario/MeshCoin-Core](https://github.com/ferreiraertmannj-stack/MeshCoin-Core)
 
 ---
 "Conectando o indivíduo, onde a internet não chega."
