@@ -27,7 +27,23 @@ class Block {
 
   /// Calcula o Hash do bloco (Algoritmo NeonHash simplificado em Dart)
   String calculateHash() {
-    String blockData = '$index$timestamp$previousHash$merkleRoot$nonce';
+    String blockData;
+    int mStorage = 0;
+    String sType = '';
+    
+    try {
+      // Usaremos o toJson para ver se essas chaves foram injetadas pós-criação ou no Node PC
+      var json = this.toJson();
+      if (json.containsKey('minerStorage')) mStorage = json['minerStorage'] ?? 0;
+      if (json.containsKey('storageType')) sType = json['storageType'] ?? '';
+    } catch(e) {}
+    
+    if (mStorage > 0 || (sType.isNotEmpty && sType != 'Mobile')) {
+      blockData = '$index$timestamp$previousHash$merkleRoot$nonce$mStorage$sType';
+    } else {
+      blockData = '$index$timestamp$previousHash$merkleRoot$nonce';
+    }
+    
     var bytes = utf8.encode(blockData);
     var digest = sha256.convert(bytes);
     return digest.toString();
@@ -76,6 +92,8 @@ class Block {
       'merkleRoot': merkleRoot,
       'nonce': nonce,
       'hash': hash,
+      'minerStorage': 0, // Smartphone padrão é 0
+      'storageType': 'Mobile',
       'transactions': transactions.map((t) => t.toJson()).toList(),
     };
   }

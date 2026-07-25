@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'block.dart';
 import 'transaction.dart';
@@ -62,7 +63,11 @@ class Ledger extends ChangeNotifier {
 
   /// Minera um novo bloco incluindo as transações da mempool (permite blocos vazios na Nebula Network)
   Block? minePendingTransactions(String minerAddress, {Function(int hashes)? onProgress}) {
-    // Permite mineração de blocos vazios para garantir que a rede avance e o PC Node valide.
+    // Trava de Tempo (Block Time) - Garante que a rede avance a cada 2 minutos no mínimo
+    int now = DateTime.now().millisecondsSinceEpoch;
+    if (now - latestBlock.timestamp < 120000) {
+      return null; // Muito cedo para minerar outro bloco
+    }
 
     // Seleciona transações e cria a transação Coinbase
     List<Transaction> blockTxs = List.from(mempool);
@@ -139,5 +144,28 @@ class Ledger extends ChangeNotifier {
       if (currentBlock.previousHash != previousBlock.hash) return false;
     }
     return true;
+  }
+
+  Future<bool> syncWithPCNode(String pcIp) async {
+    try {
+      final request = await HttpClient().getUrl(Uri.parse('http://$pcIp:8080/api/ledger'));
+      final response = await request.close();
+      if (response.statusCode == 200) {
+        final content = await response.transform(utf8.decoder).join();
+        List<dynamic> jsonBlocks = json.decode(content);
+        
+        List<Block> newChain = jsonBlocks.map((b) => Block.fromJson(b)).toList();
+        
+        // Substitui a chain local se a recebida for maior e válida
+        if (newChain.length > chain.length) {
+          chain = newChain;
+          notifyListeners();
+          return true;
+        }
+      }
+    } catch (e) {
+      print("Erro ao sincronizar Ledger do PC: $e");
+    }
+    return false;
   }
 }

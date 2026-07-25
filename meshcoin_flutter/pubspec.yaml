@@ -1,4 +1,4 @@
-name: meshcoin_app
+name: nebula_app
 description: Nebula Network — Blockchain Descentralizada, Chat E2EE e Armazenamento Distribuído
 version: 3.0.0+3
 environment:

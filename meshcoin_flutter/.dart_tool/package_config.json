@@ -14,6 +14,12 @@
       "languageVersion": "3.4"
     },
     {
+      "name": "bip39",
+      "rootUri": "file:///C:/Users/ferre/AppData/Local/Pub/Cache/hosted/pub.dev/bip39-1.0.6",
+      "packageUri": "lib/",
+      "languageVersion": "2.12"
+    },
+    {
       "name": "characters",
       "rootUri": "file:///C:/Users/ferre/AppData/Local/Pub/Cache/hosted/pub.dev/characters-1.4.1",
       "packageUri": "lib/",
@@ -50,6 +56,12 @@
       "languageVersion": "3.4"
     },
     {
+      "name": "dbus",
+      "rootUri": "file:///C:/Users/ferre/AppData/Local/Pub/Cache/hosted/pub.dev/dbus-0.7.14",
+      "packageUri": "lib/",
+      "languageVersion": "2.17"
+    },
+    {
       "name": "ffi",
       "rootUri": "file:///C:/Users/ferre/AppData/Local/Pub/Cache/hosted/pub.dev/ffi-2.2.0",
       "packageUri": "lib/",
@@ -78,6 +90,12 @@
       "rootUri": "file:///C:/Users/ferre/AppData/Local/Pub/Cache/hosted/pub.dev/google_fonts-6.3.3",
       "packageUri": "lib/",
       "languageVersion": "3.9"
+    },
+    {
+      "name": "hex",
+      "rootUri": "file:///C:/Users/ferre/AppData/Local/Pub/Cache/hosted/pub.dev/hex-0.2.0",
+      "packageUri": "lib/",
+      "languageVersion": "2.12"
     },
     {
       "name": "hooks",
@@ -140,6 +158,30 @@
       "languageVersion": "3.5"
     },
     {
+      "name": "nearby_connections",
+      "rootUri": "file:///C:/Users/ferre/AppData/Local/Pub/Cache/hosted/pub.dev/nearby_connections-4.3.0",
+      "packageUri": "lib/",
+      "languageVersion": "2.12"
+    },
+    {
+      "name": "network_info_plus",
+      "rootUri": "file:///C:/Users/ferre/AppData/Local/Pub/Cache/hosted/pub.dev/network_info_plus-6.1.4",
+      "packageUri": "lib/",
+      "languageVersion": "2.18"
+    },
+    {
+      "name": "network_info_plus_platform_interface",
+      "rootUri": "file:///C:/Users/ferre/AppData/Local/Pub/Cache/hosted/pub.dev/network_info_plus_platform_interface-2.0.2",
+      "packageUri": "lib/",
+      "languageVersion": "2.18"
+    },
+    {
+      "name": "nm",
+      "rootUri": "file:///C:/Users/ferre/AppData/Local/Pub/Cache/hosted/pub.dev/nm-0.5.0",
+      "packageUri": "lib/",
+      "languageVersion": "2.12"
+    },
+    {
       "name": "objective_c",
       "rootUri": "file:///C:/Users/ferre/AppData/Local/Pub/Cache/hosted/pub.dev/objective_c-9.4.1",
       "packageUri": "lib/",
@@ -192,6 +234,48 @@
       "rootUri": "file:///C:/Users/ferre/AppData/Local/Pub/Cache/hosted/pub.dev/path_provider_windows-2.3.0",
       "packageUri": "lib/",
       "languageVersion": "3.2"
+    },
+    {
+      "name": "permission_handler",
+      "rootUri": "file:///C:/Users/ferre/AppData/Local/Pub/Cache/hosted/pub.dev/permission_handler-11.4.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.5"
+    },
+    {
+      "name": "permission_handler_android",
+      "rootUri": "file:///C:/Users/ferre/AppData/Local/Pub/Cache/hosted/pub.dev/permission_handler_android-12.1.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.5"
+    },
+    {
+      "name": "permission_handler_apple",
+      "rootUri": "file:///C:/Users/ferre/AppData/Local/Pub/Cache/hosted/pub.dev/permission_handler_apple-9.4.10",
+      "packageUri": "lib/",
+      "languageVersion": "2.18"
+    },
+    {
+      "name": "permission_handler_html",
+      "rootUri": "file:///C:/Users/ferre/AppData/Local/Pub/Cache/hosted/pub.dev/permission_handler_html-0.1.3+5",
+      "packageUri": "lib/",
+      "languageVersion": "3.3"
+    },
+    {
+      "name": "permission_handler_platform_interface",
+      "rootUri": "file:///C:/Users/ferre/AppData/Local/Pub/Cache/hosted/pub.dev/permission_handler_platform_interface-4.3.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.5"
+    },
+    {
+      "name": "permission_handler_windows",
+      "rootUri": "file:///C:/Users/ferre/AppData/Local/Pub/Cache/hosted/pub.dev/permission_handler_windows-0.2.1",
+      "packageUri": "lib/",
+      "languageVersion": "2.12"
+    },
+    {
+      "name": "petitparser",
+      "rootUri": "file:///C:/Users/ferre/AppData/Local/Pub/Cache/hosted/pub.dev/petitparser-7.0.2",
+      "packageUri": "lib/",
+      "languageVersion": "3.8"
     },
     {
       "name": "platform",
@@ -320,10 +404,22 @@
       "languageVersion": "3.4"
     },
     {
+      "name": "win32",
+      "rootUri": "file:///C:/Users/ferre/AppData/Local/Pub/Cache/hosted/pub.dev/win32-5.15.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.8"
+    },
+    {
       "name": "xdg_directories",
       "rootUri": "file:///C:/Users/ferre/AppData/Local/Pub/Cache/hosted/pub.dev/xdg_directories-1.1.0",
       "packageUri": "lib/",
       "languageVersion": "3.3"
+    },
+    {
+      "name": "xml",
+      "rootUri": "file:///C:/Users/ferre/AppData/Local/Pub/Cache/hosted/pub.dev/xml-6.6.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.8"
     },
     {
       "name": "yaml",

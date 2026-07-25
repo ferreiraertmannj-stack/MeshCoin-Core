@@ -259,14 +259,13 @@ class _MessengerScreenState extends State<MessengerScreen> {
       ),
       child: Row(
         children: [
-          // Botão de anexo (futuro: fotos, áudio)
           IconButton(
-            icon: const Icon(Icons.add_circle_outline, color: MeshColors.textMuted),
+            icon: const Icon(Icons.attach_file, color: MeshColors.textMuted),
             onPressed: () {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('Fotos e áudios (até 1min) exigem doação de 5GB para a Nebula Cloud!', style: GoogleFonts.inter()),
-                  backgroundColor: MeshColors.surface,
+                  content: Text('Requisito de 5GB atingido! Envio de mídia fragmentada (PQC) em rollout Beta.', style: GoogleFonts.inter()),
+                  backgroundColor: MeshColors.neonViolet,
                   behavior: SnackBarBehavior.floating,
                 ),
               );

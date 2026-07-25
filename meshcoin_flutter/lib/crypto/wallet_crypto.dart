@@ -70,9 +70,9 @@ class WalletCrypto {
     final ripemd160 = pc.Digest('RIPEMD-160');
     Uint8List ripemdHash = ripemd160.process(Uint8List.fromList(sha256Hash));
 
-    // Adiciona version byte (0x4D = 'M' para MeshCoin)
+    // Adiciona version byte (0x4E = 'N' para Nebula)
     Uint8List versionedPayload = Uint8List(1 + ripemdHash.length);
-    versionedPayload[0] = 0x4D; // Version byte MeshCoin
+    versionedPayload[0] = 0x4E; // Version byte Nebula
     versionedPayload.setRange(1, versionedPayload.length, ripemdHash);
 
     // Checksum: primeiros 4 bytes de SHA256(SHA256(versionedPayload))
@@ -88,7 +88,7 @@ class WalletCrypto {
     // Base58 encode
     String base58Address = _base58Encode(addressBytes);
 
-    return 'MESH$base58Address';
+    return 'NBL$base58Address';
   }
 
   /// Comprime a chave pública EC (formato 33 bytes)

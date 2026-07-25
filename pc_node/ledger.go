@@ -85,7 +85,12 @@ func saveLedger() {
 }
 
 func calculateHash(b Block) string {
-	record := fmt.Sprintf("%d%d%s%s%d%d%s", b.Index, b.Timestamp, b.PreviousHash, b.MerkleRoot, b.Nonce, b.MinerStorage, b.StorageType)
+	var record string
+	if b.MinerStorage > 0 || (b.StorageType != "" && b.StorageType != "Mobile") {
+		record = fmt.Sprintf("%d%d%s%s%d%d%s", b.Index, b.Timestamp, b.PreviousHash, b.MerkleRoot, b.Nonce, b.MinerStorage, b.StorageType)
+	} else {
+		record = fmt.Sprintf("%d%d%s%s%d", b.Index, b.Timestamp, b.PreviousHash, b.MerkleRoot, b.Nonce)
+	}
 	h := sha256.New()
 	h.Write([]byte(record))
 	hashed := h.Sum(nil)

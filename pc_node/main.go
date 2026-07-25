@@ -49,11 +49,13 @@ func main() {
 
 func startSidecarAPI() {
 	http.HandleFunc("/api/ledger", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(getLedgerJSON())
 	})
 	
 	http.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Content-Type", "application/json")
 		status := fmt.Sprintf(`{"status": "online", "storage_type": "%s", "cloud_allocated_gb": 100, "blocks": %d}`, DetectStorageType(), len(ledger.Chain))
 		w.Write([]byte(status))

@@ -4,6 +4,7 @@ import '../theme/app_theme.dart';
 import 'dart:io';
 import 'dart:convert';
 import 'dart:async';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class NebulaScreen extends StatefulWidget {
   const NebulaScreen({super.key});
@@ -13,10 +14,12 @@ class NebulaScreen extends StatefulWidget {
 }
 
 class _NebulaScreenState extends State<NebulaScreen> {
-  String _storageSize = '1.2 GB';
+  String _storageSize = '5.0 GB';
+  double _allocatedGB = 5.0;
   String _hardwareType = 'Mobile';
   String _bonus = '0.0';
   Timer? _timer;
+  bool _isDesktop = false;
 
   @override
   void initState() {
@@ -32,9 +35,29 @@ class _NebulaScreenState extends State<NebulaScreen> {
 
   void _checkDesktopSidecar() async {
     if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      _isDesktop = true;
       _pollSidecar();
       _timer = Timer.periodic(const Duration(seconds: 5), (_) => _pollSidecar());
+    } else {
+      _loadMobileConfig();
     }
+  }
+
+  Future<void> _loadMobileConfig() async {
+    final prefs = await SharedPreferences.getInstance();
+    double savedGB = prefs.getDouble('nebula_allocated_gb') ?? 5.0;
+    if (mounted) {
+      setState(() {
+        _allocatedGB = savedGB;
+        _storageSize = '${_allocatedGB.toStringAsFixed(1)} GB';
+        _bonus = '+0.0 NBL/bloco'; // Celular não ganha bônus de HDD/SSD por padrão
+      });
+    }
+  }
+
+  Future<void> _saveMobileConfig(double gb) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setDouble('nebula_allocated_gb', gb);
   }
 
   Future<void> _pollSidecar() async {
@@ -109,7 +132,7 @@ class _NebulaScreenState extends State<NebulaScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Armazenamento Descentralizado do Ecossistema MeshCoin',
+              'Armazenamento Descentralizado do Ecossistema Nebula',
               textAlign: TextAlign.center,
               style: GoogleFonts.inter(
                 color: MeshColors.textMuted,
@@ -117,6 +140,37 @@ class _NebulaScreenState extends State<NebulaScreen> {
                 height: 1.5,
               ),
             ),
+            if (!_isDesktop) ...[
+              const SizedBox(height: 24),
+              Text(
+                'Alocar Espaço (GB)',
+                style: GoogleFonts.inter(
+                  color: MeshColors.textPrimary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              Slider(
+                value: _allocatedGB,
+                min: 1.0,
+                max: 100.0,
+                divisions: 99,
+                activeColor: MeshColors.neonCyan,
+                inactiveColor: MeshColors.surfaceLight,
+                onChanged: (value) {
+                  setState(() {
+                    _allocatedGB = value;
+                    _storageSize = '${_allocatedGB.toStringAsFixed(1)} GB';
+                  });
+                },
+                onChangeEnd: (value) {
+                  _saveMobileConfig(value);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Configuração de espaço salva!')),
+                  );
+                },
+              ),
+            ],
           ],
         ),
       ),

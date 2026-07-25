@@ -118,10 +118,12 @@ class _MiningScreenState extends State<MiningScreen> with TickerProviderStateMix
           _currentHash = newBlock.hash;
         });
 
+        ScaffoldMessenger.of(context).clearSnackBars();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Bloco #${newBlock.index} minerado! Recompensa recebida.'),
             backgroundColor: MeshColors.neonGreen,
+            duration: const Duration(seconds: 2),
           ),
         );
 
@@ -131,7 +133,7 @@ class _MiningScreenState extends State<MiningScreen> with TickerProviderStateMix
           'block': newBlock.toJson(),
         });
       } else {
-        // Se a mempool estiver vazia, apenas roda um hashing "dummy" para mostrar a visualização de poder
+        // Se ainda não deu 2 minutos, roda um hashing "dummy" simulando o PoW contínuo
         setState(() {
           final rng = Random();
           _hashRate = 120 + rng.nextDouble() * 80; // H/s ARM simulado

@@ -427,6 +427,7 @@ class _MeshCoinShellState extends State<MeshCoinShell> {
             ),
             WalletScreen(
               meshNode: meshNode,
+              ledger: ledger,
               address: _address,
               balance: _balance,
               onWalletGenerated: _onWalletGenerated,

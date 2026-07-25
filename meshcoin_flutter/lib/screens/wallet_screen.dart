@@ -5,20 +5,23 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../theme/app_theme.dart';
 import '../crypto/wallet_crypto.dart';
 import '../mesh_node.dart';
+import '../blockchain/ledger.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 
 class WalletScreen extends StatefulWidget {
   final MeshNode meshNode;
+  final Ledger ledger;
   final String address;
   final double balance;
   final Function(Map<String, String>) onWalletGenerated;
-  final Function(String dest, String valor) onSendPayment;
+  final Function(String, String) onSendPayment;
   final List<Map<String, dynamic>> transactions;
 
   const WalletScreen({
     super.key,
     required this.meshNode,
+    required this.ledger,
     required this.address,
     required this.balance,
     required this.onWalletGenerated,
@@ -169,6 +172,65 @@ class _WalletScreenState extends State<WalletScreen> {
                   );
                 }
                 setState(() => _isGenerating = false);
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _syncWithPC() async {
+    TextEditingController ipController = TextEditingController();
+    
+    // Tenta sugerir o IP da rede local se já tiver descoberto
+    if (widget.meshNode.directPeers.isNotEmpty) {
+      String suggested = widget.meshNode.directPeers.keys.first.split(':').first;
+      ipController.text = suggested;
+    }
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: MeshColors.surface,
+          title: Text('Sincronizar com PC Node', style: GoogleFonts.inter(color: MeshColors.textPrimary)),
+          content: TextField(
+            controller: ipController,
+            style: GoogleFonts.inter(color: MeshColors.textPrimary),
+            decoration: InputDecoration(
+              hintText: 'Digite o IP do PC (ex: 192.168.1.15)',
+              hintStyle: GoogleFonts.inter(color: MeshColors.textMuted),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancelar', style: GoogleFonts.inter(color: MeshColors.textMuted)),
+            ),
+            NeonButton(
+              label: 'Baixar Ledger',
+              isSmall: true,
+              onPressed: () async {
+                Navigator.pop(context);
+                String ip = ipController.text.trim();
+                if (ip.isNotEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Sincronizando com PC Node...')),
+                  );
+                  bool success = await widget.ledger.syncWithPCNode(ip);
+                  if (success) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Sincronizado! Saldo atualizado.'), backgroundColor: MeshColors.neonGreen),
+                    );
+                    // Atualiza o saldo usando a função que iterará a chain baixada
+                    // Note: No design atual, se a chain mudar, a Wallet precisa ser recarregada
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Falha ao sincronizar. PC não encontrado.'), backgroundColor: MeshColors.neonRed),
+                    );
+                  }
+                }
               },
             ),
           ],
@@ -378,6 +440,17 @@ class _WalletScreenState extends State<WalletScreen> {
                           isSmall: true,
                           onPressed: _recoverWallet,
                           gradient: const LinearGradient(colors: [MeshColors.surfaceLight, MeshColors.textMuted]),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: NeonButton(
+                          label: 'Sync PC Node',
+                          icon: Icons.sync,
+                          isSmall: true,
+                          onPressed: _syncWithPC,
+                          gradient: const LinearGradient(colors: [MeshColors.neonCyan, MeshColors.neonBlue]),
                         ),
                       ),
                     ],

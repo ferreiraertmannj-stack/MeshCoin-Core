@@ -1,0 +1,13 @@
+[
+  {
+    "index": 0,
+    "timestamp": 1672531200000,
+    "previousHash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "merkleRoot": "",
+    "nonce": 0,
+    "hash": "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
+    "minerStorageGB": 0,
+    "storageType": "",
+    "transactions": []
+  }
+]
