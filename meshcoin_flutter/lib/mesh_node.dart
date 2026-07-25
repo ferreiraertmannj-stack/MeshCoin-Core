@@ -1,7 +1,9 @@
 import 'dart:io';
 import 'dart:convert';
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:network_info_plus/network_info_plus.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 import 'batman_router.dart';
 import 'network/nearby_service.dart';
 
@@ -16,9 +18,10 @@ class MeshNode {
   late NearbyService nearbyService;
   
   String? myIpAddress;
+  WebSocketChannel? _wsChannel; // Conexão Global via PC Node
   
   bool isBridgeNode = false; // Se for True, esse celular tem acesso 4G/Wi-Fi On-Grid
-  final String globalServerUrl = "http://meshcoin.global/api/sync"; 
+  final String globalServerUrl = "ws://127.0.0.1:8080/ws"; // PC Node local ou IP da nuvem
   
   final List<Function(Map<String, dynamic>)> onMessageCallbacks = [];
   
@@ -40,16 +43,44 @@ class MeshNode {
 
   Future<void> start() async {
     isRunning = true;
-    await _detectMyIp();
+    if (!kIsWeb) {
+      await _detectMyIp();
+      // Inicia a camada Nearby (BLE + Wi-Fi Direct) apenas se não for Web
+      await nearbyService.start();
+      
+      // Inicia a camada UDP/TCP (Hotspot/LAN)
+      _startUdpListener();
+      _startUdpBroadcaster();
+      _startTcpListener();
+      _startOgmBroadcaster(); // B.A.T.M.A.N OGM
+    }
     
-    // Inicia a camada Nearby (BLE + Wi-Fi Direct)
-    await nearbyService.start();
-    
-    // Inicia a camada UDP/TCP (Hotspot/LAN)
-    _startUdpListener();
-    _startUdpBroadcaster();
-    _startTcpListener();
-    _startOgmBroadcaster(); // B.A.T.M.A.N OGM
+    // Inicia a conexão global P2P via WebSocket (suportada na Web também)
+    _startGlobalWebSocket();
+  }
+
+  void _startGlobalWebSocket() {
+    try {
+      _wsChannel = WebSocketChannel.connect(Uri.parse(globalServerUrl));
+      _wsChannel?.stream.listen((message) {
+        // Mensagem recebida da internet (Japão, etc)
+        try {
+          final data = json.decode(message);
+          for (var cb in onMessageCallbacks) {
+            cb(data);
+          }
+        } catch (e) {}
+      }, onError: (err) {
+        print("Erro WS Global: \$err");
+      }, onDone: () {
+        // Reconectar após um tempo se cair
+        if (isRunning) {
+          Future.delayed(Duration(seconds: 5), _startGlobalWebSocket);
+        }
+      });
+    } catch (e) {
+      print("Não foi possível conectar ao WebSocket Global: \$e");
+    }
   }
 
   Future<void> _detectMyIp() async {
@@ -230,6 +261,13 @@ class MeshNode {
       "payload": payload,
     };
     
+    // Envia pela Internet via PC Node (Supernode Global) para chats entre continentes
+    if (_wsChannel != null) {
+      try {
+        _wsChannel!.sink.add(jsonEncode(packet));
+      } catch(e) {}
+    }
+    
     // Sempre envia também para a rede BLE/Wi-Fi Direct offline
     try {
       nearbyService.broadcastData(packet);
@@ -259,6 +297,31 @@ class MeshNode {
     }).catchError((e) {
       // Peer inalcançável
     });
+  }
+
+  void broadcastMessage(Map<String, dynamic> data) {
+    String jsonStr = json.encode(data);
+    
+    // Envia pela Internet se disponível
+    if (_wsChannel != null) {
+      try {
+        _wsChannel!.sink.add(jsonStr);
+      } catch(e) {
+        print("Erro ao enviar WebSocket: \$e");
+      }
+    }
+    
+    if (kIsWeb) return; // Web só usa Websocket
+
+    // Envia via Nearby (BLE)
+    nearbyService.broadcastData(data);
+
+    // Envia via TCP para Peers Conhecidos
+    for (String peer in directPeers) {
+      String ip = peer.split(":")[0];
+      int port = int.parse(peer.split(":")[1]);
+      _sendToIp(ip, data);
+    }
   }
 
   void _sendToAllDirectPeers(Map<String, dynamic> data, {String? excludeIp}) {

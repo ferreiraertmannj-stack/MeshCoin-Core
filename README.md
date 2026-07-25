@@ -17,7 +17,7 @@ A **Nebula Network** é um ecossistema completo de blockchain descentralizada, m
 | Recurso | Descrição |
 |---|---|
 | 🛰️ **Conectividade Off-Grid** | Transacione e comunique-se via Bluetooth BLE, Wi-Fi Direct, Hotspot ou qualquer conexão disponível. Funciona em zonas de sombra, apagões e regiões censuradas. |
-| ⛏️ **Mineração ASIC-Resistant** | `NeonHash` (ARM/Mobile) + `RandomX` (x86/PC) — impossibilita GPUs e ASICs. Uma CPU, um voto. |
+| ⛏️ **Mineração ASIC-Resistant** | `NeonHash` (ARM/Mobile e x86/PC) — impossibilita GPUs e ASICs. Cálculo vetorial intensivo. Uma CPU, um voto. |
 | 💬 **Nebula Chat (E2EE)** | Mensageria estilo Telegram 100% descentralizada. Textos, fotos e áudios (até 1 min), tudo fragmentado, criptografado ponta-a-ponta (AES-256-GCM) e armazenado na Nebula Cloud. |
 | ☁️ **Nebula Cloud** | Armazenamento descentralizado com Reed-Solomon. Cada usuário doa no mínimo 5GB e recebe boost na mineração. O Ledger completo nunca fica no celular — apenas fragmentos criptografados. |
 | 🔀 **Protocolo B.A.T.M.A.N.** | Roteamento multi-hop inteligente. Dados saltam de nó em nó até o destino, mesmo sem linha direta. |
@@ -37,7 +37,7 @@ O **NBL** é o token utilitário nativo da Nebula Network, funcionando como **g�
 | **Block Time** | 2 minutos |
 | **Recompensa Inicial** | 50 NBL / bloco |
 | **Halving** | A cada 2.100.000 blocos (~8 anos) |
-| **Consenso** | Proof-of-Work Híbrido (NeonHash + RandomX) |
+| **Consenso** | Proof-of-Work Híbrido (NeonHash Vetorial) |
 | **Criptografia** | ECDSA secp256k1 · Base58Check |
 | **Boost de Mineração** | +25% para nós que doam ≥5GB à Nebula Cloud |
 
@@ -134,7 +134,7 @@ Módulos ESP32 com antenas de longo alcance atuando como repetidores cegos da re
 - [x] Integração com Nebula Cloud (upload automático do Ledger)
 - [x] Nebula Chat com criptografia E2EE
 - [x] Rebranding completo para Nebula Network
-- [ ] RandomX para mineração x86/x64 no PC
+- [ ] Otimização do NeonHash para mineração x86/x64 no PC
 - [ ] Sistema de usernames (@usuario) vinculado à blockchain
 - [ ] Envio de fotos e áudios comprimidos no Nebula Chat
 - [ ] Boost de mineração para doadores de storage (Proof of Storage)

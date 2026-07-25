@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"github.com/gorilla/websocket"
 )
 
 func main() {
@@ -25,10 +26,11 @@ func main() {
 	storageType := DetectStorageType()
 	log.Printf("Hardware Detectado: %s\n", storageType)
 	
-	// Exemplo: 100 GB para Desktop Cloud
-	err := AllocateNebulaCloudStorage(100)
+	// Exemplo: 100 GB Total (50GB Ledger / 50GB Cloud)
+	log.Println("Política de Armazenamento: 100GB Alocados (50% Ledger / 50% Nebula Cloud)")
+	err := AllocateNebulaCloudStorage(50)
 	if err != nil {
-		log.Println("Aviso na alocação Nebula:", err)
+		log.Println("Aviso na alocação Nebula Cloud:", err)
 	}
 
 	// Inicia os listeners de rede UDP/TCP (Mesh P2P)
@@ -47,6 +49,12 @@ func main() {
 	log.Println("Adeus.")
 }
 
+var clients = make(map[*websocket.Conn]bool)
+var broadcast = make(chan []byte)
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool { return true },
+}
+
 func startSidecarAPI() {
 	http.HandleFunc("/api/ledger", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -61,8 +69,50 @@ func startSidecarAPI() {
 		w.Write([]byte(status))
 	})
 
-	log.Println("📡 Sidecar API rodando na porta 8080 (Aguardando Frontend Flutter)")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
+	// P2P Internet Gateway - Nebula WebSocket Chat Relay
+	http.HandleFunc("/ws", handleWebSocket)
+
+	go handleMessages()
+
+	log.Println("📡 Sidecar API & WebSocket rodando na porta 8080 (Aguardando Frontend Flutter)")
+	if err := http.ListenAndServe("0.0.0.0:8080", nil); err != nil {
 		log.Fatal("Falha ao iniciar API Sidecar:", err)
+	}
+}
+
+func handleWebSocket(w http.ResponseWriter, r *http.Request) {
+	ws, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Println("Erro no WebSocket Upgrade:", err)
+		return
+	}
+	defer ws.Close()
+
+	clients[ws] = true
+	log.Println("Novo cliente WebSocket conectado!")
+
+	for {
+		_, msg, err := ws.ReadMessage()
+		if err != nil {
+			log.Println("Erro de leitura WS, desconectando cliente:", err)
+			delete(clients, ws)
+			break
+		}
+		// Recebeu mensagem PQC, vamos rotear para todos online
+		broadcast <- msg
+	}
+}
+
+func handleMessages() {
+	for {
+		msg := <-broadcast
+		for client := range clients {
+			err := client.WriteMessage(websocket.TextMessage, msg)
+			if err != nil {
+				log.Println("Erro ao enviar via WS:", err)
+				client.Close()
+				delete(clients, client)
+			}
+		}
 	}
 }

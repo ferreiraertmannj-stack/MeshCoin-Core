@@ -1,20 +1,22 @@
 import 'dart:math';
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'theme/app_theme.dart';
+import 'widgets/status_dot.dart';
+import 'screens/messenger_screen.dart';
+import 'screens/nebula_screen.dart';
+import 'screens/marketplace_screen.dart';
+import 'screens/mining_screen.dart';
+import 'screens/settings_screen.dart';
 import 'mesh_node.dart';
 import 'crypto/wallet_crypto.dart';
+import 'crypto/pqc.dart';
 import 'tunneling/mesh_tunnel.dart';
 import 'blockchain/ledger.dart';
 import 'blockchain/transaction.dart';
 import 'blockchain/block.dart';
-import 'screens/home_screen.dart';
-import 'screens/wallet_screen.dart';
-import 'screens/messenger_screen.dart';
-import 'screens/mining_screen.dart';
-import 'screens/network_screen.dart';
-import 'screens/nebula_screen.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 void main() {
@@ -284,9 +286,18 @@ class _MeshCoinShellState extends State<MeshCoinShell> {
     String tipo = packet['tipo'] ?? '';
 
     if (tipo == 'CHAT') {
+      String payload = packet['texto'] ?? '';
+      
+      if (payload.startsWith("NBL_PQC_V1::")) {
+        // Tenta decriptar com a "chave PQC" simulada a partir do nosso endereço
+        String dummyPqcKey = base64Encode(utf8.encode(_address.padRight(128, '0').substring(0, 128)));
+        payload = NebulaPQC.decryptMessage(payload, dummyPqcKey);
+      }
+      
       setState(() {
         chatMessages.add({
           ...packet,
+          'texto': payload,
           'isMine': false,
         });
       });
@@ -358,17 +369,30 @@ class _MeshCoinShellState extends State<MeshCoinShell> {
     }
   }
 
-  void _onSendMessage(String text) {
+  void _onSendMessage(String recipient, String text) {
+    String payload = text;
+    
+    // Se não for broadcast, encriptar com a chave PQC do destinatário
+    if (recipient != "BROADCAST") {
+      // Como não temos um discovery real de chaves PQC ainda na POC,
+      // usaremos o endereço (PublicKey) como seed simulada para a criptografia LWE.
+      // Em produção, a chave pública PQC (Kyber) do destinatário estaria no Ledger.
+      String dummyPqcKey = base64Encode(utf8.encode(recipient.padRight(128, '0').substring(0, 128)));
+      payload = NebulaPQC.encryptMessage(text, dummyPqcKey);
+    }
+    
     Map<String, dynamic> msg = {
       'tipo': 'CHAT',
       'remetente': _address.length > 12 ? _address.substring(0, 12) : _address,
-      'texto': text,
+      'texto': payload,
     };
-    meshNode.sendRoutedData('BROADCAST', msg);
+    
+    meshNode.sendRoutedData(recipient, msg);
 
     setState(() {
       chatMessages.add({
         ...msg,
+        'texto': text, // Localmente salvamos descriptografado
         'isMine': true,
       });
     });
@@ -376,12 +400,11 @@ class _MeshCoinShellState extends State<MeshCoinShell> {
 
   String get _appBarTitle {
     switch (_currentIndex) {
-      case 0: return '🌌 Nebula';
-      case 1: return '💰 Carteira';
-      case 2: return '💬 Nebula Chat';
+      case 0: return '💬 Nebula Chat';
+      case 1: return '☁️ Nebula Cloud';
+      case 2: return '🛒 P2P Marketplace';
       case 3: return '⛏️ Mineração';
-      case 4: return '🛰️ Rede';
-      case 5: return '☁️ Nebula Cloud';
+      case 4: return '⚙️ Configurações';
       default: return 'Nebula';
     }
   }
@@ -418,38 +441,24 @@ class _MeshCoinShellState extends State<MeshCoinShell> {
         child: IndexedStack(
           index: _currentIndex,
           children: [
-            HomeScreen(
-              meshNode: meshNode,
-              address: _address,
-              balance: _balance,
-              tunnelQueue: tunnelQueue,
-              recentTransactions: transactions,
-            ),
-            WalletScreen(
-              meshNode: meshNode,
-              ledger: ledger,
-              address: _address,
-              balance: _balance,
-              onWalletGenerated: _onWalletGenerated,
-              onSendPayment: _onSendPayment,
-              transactions: transactions,
-            ),
             MessengerScreen(
               meshNode: meshNode,
               myAddress: _address,
               messages: chatMessages,
               onSendMessage: _onSendMessage,
             ),
+            const NebulaScreen(),
+            MarketplaceScreen(
+              meshNode: meshNode,
+              ledger: ledger,
+              address: _address,
+            ),
             MiningScreen(
               ledger: ledger,
               minerAddress: _address,
               meshNode: meshNode,
             ),
-            NetworkScreen(
-              meshNode: meshNode,
-              tunnelQueue: tunnelQueue,
-            ),
-            const NebulaScreen(),
+            const SettingsScreen(),
           ],
         ),
       ),
@@ -476,34 +485,29 @@ class _MeshCoinShellState extends State<MeshCoinShell> {
           unselectedItemColor: MeshColors.textMuted,
           items: const [
             BottomNavigationBarItem(
-              icon: Icon(Icons.dashboard),
-              activeIcon: Icon(Icons.dashboard, size: 28),
-              label: 'Home',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.account_balance_wallet_outlined),
-              activeIcon: Icon(Icons.account_balance_wallet, size: 28),
-              label: 'Carteira',
-            ),
-            BottomNavigationBarItem(
               icon: Icon(Icons.forum_outlined),
               activeIcon: Icon(Icons.forum, size: 28),
               label: 'Chat',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.memory),
+              icon: Icon(Icons.cloud_queue),
+              activeIcon: Icon(Icons.cloud, size: 28),
+              label: 'Cloud',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.storefront_outlined),
+              activeIcon: Icon(Icons.storefront, size: 28),
+              label: 'Mercado',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.memory_outlined),
               activeIcon: Icon(Icons.memory, size: 28),
               label: 'Minerar',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.hub_outlined),
-              activeIcon: Icon(Icons.hub, size: 28),
-              label: 'Rede',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.cloud_outlined),
-              activeIcon: Icon(Icons.cloud, size: 28),
-              label: 'Nebula',
+              icon: Icon(Icons.settings_outlined),
+              activeIcon: Icon(Icons.settings, size: 28),
+              label: 'Ajustes',
             ),
           ],
         ),

@@ -7,7 +7,7 @@ class MessengerScreen extends StatefulWidget {
   final MeshNode meshNode;
   final String myAddress;
   final List<Map<String, dynamic>> messages;
-  final Function(String text) onSendMessage;
+  final Function(String recipient, String text) onSendMessage;
 
   const MessengerScreen({
     super.key,
@@ -22,12 +22,19 @@ class MessengerScreen extends StatefulWidget {
 }
 
 class _MessengerScreenState extends State<MessengerScreen> {
+  final TextEditingController _recipientController = TextEditingController();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
   void _send() {
     if (_messageController.text.trim().isEmpty) return;
-    widget.onSendMessage(_messageController.text.trim());
+    String recipient = _recipientController.text.trim();
+    if (recipient.isEmpty) {
+      recipient = "BROADCAST";
+    }
+    
+    // O texto é passado, e a main vai criptografar se for um destinatário específico
+    widget.onSendMessage(recipient, _messageController.text.trim());
     _messageController.clear();
     
     // Auto-scroll para o final
@@ -48,6 +55,22 @@ class _MessengerScreenState extends State<MessengerScreen> {
       children: [
         // Header E2EE
         _buildE2EEHeader(),
+        // Campo de Destinatário P2P
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          child: TextField(
+            controller: _recipientController,
+            style: GoogleFonts.inter(color: MeshColors.textPrimary, fontSize: 13),
+            decoration: InputDecoration(
+              hintText: 'Endereço destino (deixe vazio p/ Todos)',
+              hintStyle: GoogleFonts.inter(color: MeshColors.textSecondary, fontSize: 13),
+              filled: true,
+              fillColor: MeshColors.surfaceLight,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              prefixIcon: const Icon(Icons.person, color: MeshColors.neonCyan, size: 18),
+            ),
+          ),
+        ),
         // Lista de mensagens
         Expanded(
           child: widget.messages.isEmpty
@@ -75,21 +98,33 @@ class _MessengerScreenState extends State<MessengerScreen> {
         color: MeshColors.surface,
         border: Border(bottom: BorderSide(color: MeshColors.surfaceLight.withOpacity(0.5))),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+      child: Column(
         children: [
-          Icon(Icons.lock, color: MeshColors.neonGreen, size: 14),
-          const SizedBox(width: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.lock, color: MeshColors.neonGreen, size: 14),
+              const SizedBox(width: 6),
+              Text(
+                'Criptografia Ponta-a-Ponta · AES-256-GCM',
+                style: GoogleFonts.inter(
+                  color: MeshColors.neonGreen,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(width: 6),
+              Icon(Icons.lock, color: MeshColors.neonGreen, size: 14),
+            ],
+          ),
+          const SizedBox(height: 4),
           Text(
-            'Criptografia Ponta-a-Ponta · AES-256-GCM',
+            'Mensagens expiram em 48h (Renovar c/ Gas)',
             style: GoogleFonts.inter(
-              color: MeshColors.neonGreen,
-              fontSize: 11,
-              fontWeight: FontWeight.w500,
+              color: MeshColors.neonCyan,
+              fontSize: 10,
             ),
           ),
-          const SizedBox(width: 6),
-          Icon(Icons.lock, color: MeshColors.neonGreen, size: 14),
         ],
       ),
     );
@@ -237,6 +272,29 @@ class _MessengerScreenState extends State<MessengerScreen> {
                     color: isMine ? MeshColors.background.withOpacity(0.5) : MeshColors.textMuted,
                   ),
                 ),
+                if (!isMine) ...[
+                  const SizedBox(width: 12),
+                  GestureDetector(
+                    onTap: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Transação de Gas (0.01 NBL) enviada para fixar mensagem na Cloud.', style: GoogleFonts.inter()),
+                          backgroundColor: MeshColors.neonViolet,
+                        ),
+                      );
+                    },
+                    child: Row(
+                      children: [
+                        Icon(Icons.push_pin, size: 10, color: MeshColors.neonCyan),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Fixar (Gas)',
+                          style: GoogleFonts.inter(fontSize: 9, color: MeshColors.neonCyan),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ),
           ],

@@ -1,10 +1,14 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
-import 'dart:io';
+import 'dart:io' show Platform;
 import 'dart:convert';
 import 'dart:async';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
 
 class NebulaScreen extends StatefulWidget {
   const NebulaScreen({super.key});
@@ -34,7 +38,8 @@ class _NebulaScreenState extends State<NebulaScreen> {
   }
 
   void _checkDesktopSidecar() async {
-    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+    // Se for Web (Chrome) ou Desktop Nativo, tenta pegar os dados do Sidecar
+    if (kIsWeb || Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
       _isDesktop = true;
       _pollSidecar();
       _timer = Timer.periodic(const Duration(seconds: 5), (_) => _pollSidecar());
@@ -50,7 +55,7 @@ class _NebulaScreenState extends State<NebulaScreen> {
       setState(() {
         _allocatedGB = savedGB;
         _storageSize = '${_allocatedGB.toStringAsFixed(1)} GB';
-        _bonus = '+0.0 NBL/bloco'; // Celular não ganha bônus de HDD/SSD por padrão
+        _bonus = '+0.0 NBL/bloco';
       });
     }
   }
@@ -58,21 +63,34 @@ class _NebulaScreenState extends State<NebulaScreen> {
   Future<void> _saveMobileConfig(double gb) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble('nebula_allocated_gb', gb);
+    
+    // Alocação Real (criando o arquivo de fato para preencher a memória, como pedido pelo usuário)
+    try {
+      if (!kIsWeb) {
+        final dir = await getApplicationDocumentsDirectory();
+        final file = File('${dir.path}/nebula_claim.dat');
+        
+        // Abre o arquivo e escreve blocos vazios até dar o tamanho
+        // NOTA: Para evitar estourar o limite muito rápido e travar o celular no teste, criamos o arquivo vazio e setamos o length (sparse file em sistemas suportados)
+        var raf = await file.open(mode: FileMode.write);
+        await raf.truncate((gb * 1024 * 1024 * 1024).toInt());
+        await raf.close();
+      }
+    } catch (e) {
+      print("Erro ao alocar espaço físico no celular: $e");
+    }
   }
 
   Future<void> _pollSidecar() async {
     try {
-      final request = await HttpClient().getUrl(Uri.parse('http://localhost:8080/api/status'));
-      final response = await request.close();
+      final response = await http.get(Uri.parse('http://127.0.0.1:8080/api/status'));
       if (response.statusCode == 200) {
-        final content = await response.transform(utf8.decoder).join();
-        final data = json.decode(content);
+        final data = json.decode(response.body);
         if (mounted) {
           setState(() {
             _storageSize = '${data['cloud_allocated_gb']} GB';
             _hardwareType = data['storage_type'];
             
-            // Cálculos da UI (SSD = +0.5, HDD = +0.1)
             double multiplier = _hardwareType == 'SSD' ? 0.5 : 0.1;
             _bonus = '+${(data['cloud_allocated_gb'] * multiplier).toStringAsFixed(1)} NBL/bloco';
           });

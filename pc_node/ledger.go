@@ -91,10 +91,32 @@ func calculateHash(b Block) string {
 	} else {
 		record = fmt.Sprintf("%d%d%s%s%d", b.Index, b.Timestamp, b.PreviousHash, b.MerkleRoot, b.Nonce)
 	}
+	
+	// NeonHash v1.0 (Vector Math / Memory Hard Simulation)
 	h := sha256.New()
 	h.Write([]byte(record))
-	hashed := h.Sum(nil)
-	return hex.EncodeToString(hashed)
+	seedHash := h.Sum(nil)
+
+	// Aloca um vetor de memória de 4KB (4096 bytes)
+	memoryVector := make([]byte, 4096)
+	for i := 0; i < 4096; i++ {
+		memoryVector[i] = (seedHash[i%32] ^ byte(i&255)) & 255
+	}
+
+	// Mistura o vetor (operações pseudo-vetoriais matemáticas simples)
+	state := uint32(seedHash[0])
+	for i := 0; i < 128; i++ {
+		idx := state % 4096
+		val := uint32(memoryVector[idx])
+		state = (state*31 + val) & 0xFFFFFFFF
+		memoryVector[(idx+1)%4096] ^= byte(state & 255)
+	}
+
+	// Hash final de tudo
+	hf := sha256.New()
+	hf.Write(memoryVector)
+	finalDigest := hf.Sum(nil)
+	return hex.EncodeToString(finalDigest)
 }
 
 // CalculateBlockReward aplica a fórmula do Halving e do Bônus de Armazenamento

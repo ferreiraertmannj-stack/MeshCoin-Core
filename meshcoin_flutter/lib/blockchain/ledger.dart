@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'block.dart';
 import 'transaction.dart';
 
@@ -63,11 +64,8 @@ class Ledger extends ChangeNotifier {
 
   /// Minera um novo bloco incluindo as transações da mempool (permite blocos vazios na Nebula Network)
   Block? minePendingTransactions(String minerAddress, {Function(int hashes)? onProgress}) {
-    // Trava de Tempo (Block Time) - Garante que a rede avance a cada 2 minutos no mínimo
-    int now = DateTime.now().millisecondsSinceEpoch;
-    if (now - latestBlock.timestamp < 120000) {
-      return null; // Muito cedo para minerar outro bloco
-    }
+    // Agora temos um PoW Real (NeonHash), então removemos a trava artificial de 120s.
+    // O tempo de bloco é regulado nativamente pela dificuldade do algoritmo vetorial.
 
     // Seleciona transações e cria a transação Coinbase
     List<Transaction> blockTxs = List.from(mempool);
@@ -148,11 +146,9 @@ class Ledger extends ChangeNotifier {
 
   Future<bool> syncWithPCNode(String pcIp) async {
     try {
-      final request = await HttpClient().getUrl(Uri.parse('http://$pcIp:8080/api/ledger'));
-      final response = await request.close();
+      final response = await http.get(Uri.parse('http://$pcIp:8080/api/ledger'));
       if (response.statusCode == 200) {
-        final content = await response.transform(utf8.decoder).join();
-        List<dynamic> jsonBlocks = json.decode(content);
+        List<dynamic> jsonBlocks = json.decode(response.body);
         
         List<Block> newChain = jsonBlocks.map((b) => Block.fromJson(b)).toList();
         

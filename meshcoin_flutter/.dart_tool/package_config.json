@@ -117,9 +117,9 @@
     },
     {
       "name": "intl",
-      "rootUri": "file:///C:/Users/ferre/AppData/Local/Pub/Cache/hosted/pub.dev/intl-0.19.0",
+      "rootUri": "file:///C:/Users/ferre/AppData/Local/Pub/Cache/hosted/pub.dev/intl-0.20.3",
       "packageUri": "lib/",
-      "languageVersion": "3.0"
+      "languageVersion": "3.9"
     },
     {
       "name": "jni",
@@ -374,6 +374,12 @@
       "languageVersion": "3.1"
     },
     {
+      "name": "stream_channel",
+      "rootUri": "file:///C:/Users/ferre/AppData/Local/Pub/Cache/hosted/pub.dev/stream_channel-2.1.4",
+      "packageUri": "lib/",
+      "languageVersion": "3.3"
+    },
+    {
       "name": "string_scanner",
       "rootUri": "file:///C:/Users/ferre/AppData/Local/Pub/Cache/hosted/pub.dev/string_scanner-1.4.1",
       "packageUri": "lib/",
@@ -404,6 +410,18 @@
       "languageVersion": "3.4"
     },
     {
+      "name": "web_socket",
+      "rootUri": "file:///C:/Users/ferre/AppData/Local/Pub/Cache/hosted/pub.dev/web_socket-1.0.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.4"
+    },
+    {
+      "name": "web_socket_channel",
+      "rootUri": "file:///C:/Users/ferre/AppData/Local/Pub/Cache/hosted/pub.dev/web_socket_channel-3.0.3",
+      "packageUri": "lib/",
+      "languageVersion": "3.3"
+    },
+    {
       "name": "win32",
       "rootUri": "file:///C:/Users/ferre/AppData/Local/Pub/Cache/hosted/pub.dev/win32-5.15.0",
       "packageUri": "lib/",
@@ -428,7 +446,7 @@
       "languageVersion": "3.4"
     },
     {
-      "name": "meshcoin_app",
+      "name": "nebula_app",
       "rootUri": "../",
       "packageUri": "lib/",
       "languageVersion": "3.0"

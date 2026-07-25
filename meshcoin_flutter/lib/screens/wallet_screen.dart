@@ -185,7 +185,7 @@ class _WalletScreenState extends State<WalletScreen> {
     
     // Tenta sugerir o IP da rede local se já tiver descoberto
     if (widget.meshNode.directPeers.isNotEmpty) {
-      String suggested = widget.meshNode.directPeers.keys.first.split(':').first;
+      String suggested = widget.meshNode.directPeers.first.split(':').first;
       ipController.text = suggested;
     }
 
@@ -450,7 +450,7 @@ class _WalletScreenState extends State<WalletScreen> {
                           icon: Icons.sync,
                           isSmall: true,
                           onPressed: _syncWithPC,
-                          gradient: const LinearGradient(colors: [MeshColors.neonCyan, MeshColors.neonBlue]),
+                          gradient: const LinearGradient(colors: [MeshColors.neonCyan, MeshColors.neonViolet]),
                         ),
                       ),
                     ],

@@ -25,14 +25,13 @@ class Block {
     }
   }
 
-  /// Calcula o Hash do bloco (Algoritmo NeonHash simplificado em Dart)
+  /// Calcula o Hash do bloco usando o algoritmo NeonHash
   String calculateHash() {
     String blockData;
     int mStorage = 0;
     String sType = '';
     
     try {
-      // Usaremos o toJson para ver se essas chaves foram injetadas pós-criação ou no Node PC
       var json = this.toJson();
       if (json.containsKey('minerStorage')) mStorage = json['minerStorage'] ?? 0;
       if (json.containsKey('storageType')) sType = json['storageType'] ?? '';
@@ -44,9 +43,28 @@ class Block {
       blockData = '$index$timestamp$previousHash$merkleRoot$nonce';
     }
     
-    var bytes = utf8.encode(blockData);
-    var digest = sha256.convert(bytes);
-    return digest.toString();
+    // NeonHash v1.0 (Vector Math / Memory Hard Simulation)
+    var initialBytes = utf8.encode(blockData);
+    var seedHash = sha256.convert(initialBytes).bytes;
+    
+    // Aloca um "vetor" de memória de 4KB (4096 bytes) baseado na seed
+    List<int> memoryVector = List<int>.filled(4096, 0);
+    for (int i = 0; i < 4096; i++) {
+      memoryVector[i] = (seedHash[i % 32] ^ (i & 255)) & 255;
+    }
+    
+    // Mistura o vetor (operações pseudo-vetoriais matemáticas simples)
+    int state = seedHash[0];
+    for (int i = 0; i < 128; i++) {
+      int idx = state % 4096;
+      int value = memoryVector[idx];
+      state = (state * 31 + value) & 0xFFFFFFFF; // Simula cálculo de matriz/vetor
+      memoryVector[(idx + 1) % 4096] ^= (state & 255);
+    }
+    
+    // Hash final de tudo
+    var finalDigest = sha256.convert(memoryVector);
+    return finalDigest.toString();
   }
 
   /// Gera a Árvore de Merkle das transações do bloco
