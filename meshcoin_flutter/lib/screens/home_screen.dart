@@ -160,7 +160,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               Padding(
                 padding: const EdgeInsets.only(bottom: 6, left: 8),
                 child: Text(
-                  'MESH',
+                  'NBL',
                   style: GoogleFonts.inter(
                     color: MeshColors.neonCyan,
                     fontSize: 18,
@@ -384,7 +384,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             ),
           ),
           Text(
-            '${isSent ? "-" : "+"}${tx['valor'] ?? '0'} MESH',
+            '${isSent ? "-" : "+"}${tx['valor'] ?? '0'} NBL',
             style: GoogleFonts.jetBrainsMono(
               color: isSent ? MeshColors.neonRed : MeshColors.neonGreen,
               fontWeight: FontWeight.w700,

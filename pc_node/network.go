@@ -6,16 +6,18 @@ import (
 	"log"
 	"net"
 	"strings"
+	"time"
 )
 
 const (
 	udpPort = 5555
 	tcpPort = 5556
-	magic   = "MESHCOIN_NODE"
+	magic   = "NEBULA_NODE"
 )
 
 func startNetwork() {
 	go listenUDP()
+	go broadcastPresence()
 	go listenTCP()
 }
 
@@ -45,6 +47,35 @@ func listenUDP() {
 			// Um nó celular se anunciou!
 			// Podemos mapear seu IP se precisarmos enviar algo pra ele
 			_ = remoteAddr
+		}
+	}
+}
+
+func broadcastPresence() {
+	// Cria uma conexão UDP para enviar broadcasts
+	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("255.255.255.255:%d", udpPort))
+	if err != nil {
+		log.Println("Erro ao resolver endereço de broadcast UDP:", err)
+		return
+	}
+
+	conn, err := net.DialUDP("udp", nil, addr)
+	if err != nil {
+		log.Println("Erro ao iniciar broadcast UDP:", err)
+		return
+	}
+	defer conn.Close()
+
+	msg := []byte(fmt.Sprintf("%s:%d", magic, tcpPort))
+	
+	// Envia o ping a cada 5 segundos
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		_, err := conn.Write(msg)
+		if err != nil {
+			// Em algumas redes, o 255.255.255.255 pode falhar dependendo da interface de rede principal
 		}
 	}
 }

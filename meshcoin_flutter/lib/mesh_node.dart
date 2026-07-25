@@ -8,7 +8,7 @@ import 'network/nearby_service.dart';
 class MeshNode {
   static const int udpPort = 5555;
   static const int tcpPort = 5556;
-  static const String magicWord = "MESHCOIN_NODE";
+  static const String magicWord = "NEBULA_NODE";
 
   final String nodeName;
   final Set<String> directPeers = {}; // Vizinhos de um pulo (Diretos)

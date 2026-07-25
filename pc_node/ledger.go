@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -21,7 +20,8 @@ type Transaction struct {
 	Amount          float64 `json:"amount"`
 	Fee             float64 `json:"fee"`
 	Timestamp       int64   `json:"timestamp"`
-	Signature       string  `json:"signature"`
+	Signature       string  `json:"signature"`      // Assinatura ECDSA
+	PQCSignature    string  `json:"pqcSignature"`   // [Futuro] Assinatura Pós-Quântica (Dilithium)
 }
 
 type Block struct {
@@ -31,6 +31,8 @@ type Block struct {
 	MerkleRoot   string        `json:"merkleRoot"`
 	Nonce        int           `json:"nonce"`
 	Hash         string        `json:"hash"`
+	MinerStorage int           `json:"minerStorageGB"` // Nebula Cloud Storage Pledge
+	StorageType  string        `json:"storageType"`    // "SSD" ou "HDD"
 	Transactions []Transaction `json:"transactions"`
 }
 
@@ -56,6 +58,8 @@ func initLedger() {
 			MerkleRoot:   "",
 			Nonce:        0,
 			Hash:         "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
+			MinerStorage: 0,
+			StorageType:  "SSD",
 			Transactions: []Transaction{},
 		}
 		ledger.Chain = append(ledger.Chain, genesis)
@@ -81,11 +85,32 @@ func saveLedger() {
 }
 
 func calculateHash(b Block) string {
-	record := fmt.Sprintf("%d%d%s%s%d", b.Index, b.Timestamp, b.PreviousHash, b.MerkleRoot, b.Nonce)
+	record := fmt.Sprintf("%d%d%s%s%d%d%s", b.Index, b.Timestamp, b.PreviousHash, b.MerkleRoot, b.Nonce, b.MinerStorage, b.StorageType)
 	h := sha256.New()
 	h.Write([]byte(record))
 	hashed := h.Sum(nil)
 	return hex.EncodeToString(hashed)
+}
+
+// CalculateBlockReward aplica a fórmula do Halving e do Bônus de Armazenamento
+func CalculateBlockReward(blockIndex int, minerStorageGB int, storageType string) float64 {
+	halvings := blockIndex / 2100000
+	baseReward := 50.0
+
+	// Halving
+	for i := 0; i < halvings; i++ {
+		baseReward /= 2
+	}
+
+	// Nebula Cloud Storage Bonus (Proof of Storage)
+	bonus := 0.0
+	if storageType == "SSD" {
+		bonus = float64(minerStorageGB) * 0.5 // 100GB = 50 NBL
+	} else {
+		bonus = float64(minerStorageGB) * 0.1 // 100GB = 10 NBL
+	}
+
+	return baseReward + bonus
 }
 
 func handleNewBlock(block Block) bool {

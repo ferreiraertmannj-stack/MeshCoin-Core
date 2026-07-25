@@ -4,37 +4,55 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:pointycastle/export.dart' as pc;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:bip39/bip39.dart' as bip39;
 
 /// ═══════════════════════════════════════════════════════════════
-/// MeshCoin Wallet Crypto — Real ECDSA secp256k1 + Base58Check
+/// Nebula Wallet Crypto — BIP39 + Híbrida (ECDSA secp256k1 + PQC-Ready)
 /// ═══════════════════════════════════════════════════════════════
 
 class WalletCrypto {
   static final pc.ECDomainParameters _params = pc.ECDomainParameters('secp256k1');
 
-  /// Gera um par de chaves ECDSA real usando entropia criptográfica
-  static Map<String, String> generateKeypair() {
-    final secureRandom = _getSecureRandom();
-    final keyGen = pc.ECKeyGenerator()
-      ..init(pc.ParametersWithRandom(
-        pc.ECKeyGeneratorParameters(_params),
-        secureRandom,
-      ));
+  /// Gera 24 palavras Mnemônicas (BIP39) usando 256 bits de entropia
+  static String generateMnemonic() {
+    return bip39.generateMnemonic(strength: 256); // 24 words
+  }
 
-    final keyPair = keyGen.generateKeyPair();
-    final privateKey = keyPair.privateKey as pc.ECPrivateKey;
-    final publicKey = keyPair.publicKey as pc.ECPublicKey;
+  /// Valida as 24 palavras
+  static bool validateMnemonic(String mnemonic) {
+    return bip39.validateMnemonic(mnemonic);
+  }
 
-    // Chave privada em hex (32 bytes)
-    String privateHex = privateKey.d!.toRadixString(16).padLeft(64, '0');
+  /// Gera a chave Híbrida (ECDSA + Preparado para PQC) a partir do Mnemonic
+  static Map<String, String> generateKeypairFromMnemonic(String mnemonic) {
+    if (!validateMnemonic(mnemonic)) {
+      throw Exception('Frase de recuperação inválida.');
+    }
 
-    // Chave pública comprimida (33 bytes)
+    // O Seed BIP39 possui 64 bytes (512 bits)
+    Uint8List seed = bip39.mnemonicToSeed(mnemonic);
+
+    // Para ECDSA secp256k1, usamos o SHA-256 da Seed (32 bytes)
+    var ecdsaPrivateBytes = sha256.convert(seed).bytes;
+    String privateHex = _bytesToHex(Uint8List.fromList(ecdsaPrivateBytes));
+
+    // Derivar chave pública ECDSA
+    BigInt privateKeyInt = BigInt.parse(privateHex, radix: 16);
+    pc.ECPrivateKey privateKey = pc.ECPrivateKey(privateKeyInt, _params);
+    pc.ECPoint? Q = _params.G * privateKey.d;
+    if (Q == null) throw Exception('Falha ao derivar chave pública.');
+    pc.ECPublicKey publicKey = pc.ECPublicKey(Q, _params);
+
     String publicHex = _compressPublicKey(publicKey.Q!);
 
-    // Gerar endereço MeshCoin: MESH + Base58Check(RIPEMD160(SHA256(pubkey)))
+    // O Seed será usado no futuro para gerar a chave Dilithium (PQC) diretamente:
+    // Exemplo estrutural (não-funcional na v1):
+    // String pqcPublicHex = PQC.generateDilithiumKey(seed.sublist(32));
+
     String address = _generateAddress(publicHex);
 
     return {
+      'mnemonic': mnemonic,
       'privateKey': privateHex,
       'publicKey': publicHex,
       'address': address,
@@ -135,6 +153,9 @@ class WalletCrypto {
     await prefs.setString('mesh_privateKey', wallet['privateKey']!);
     await prefs.setString('mesh_publicKey', wallet['publicKey']!);
     await prefs.setString('mesh_address', wallet['address']!);
+    if (wallet.containsKey('mnemonic')) {
+      await prefs.setString('nebula_mnemonic', wallet['mnemonic']!);
+    }
   }
 
   static Future<Map<String, String>?> loadWallet() async {
@@ -169,6 +190,10 @@ class WalletCrypto {
       bytes.add(int.parse(hex.substring(i, i + 2), radix: 16));
     }
     return Uint8List.fromList(bytes);
+  }
+
+  static String _bytesToHex(Uint8List bytes) {
+    return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
   }
 
   static const String _base58Alphabet =

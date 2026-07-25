@@ -114,7 +114,7 @@ class _MessengerScreenState extends State<MessengerScreen> {
             ),
             const SizedBox(height: 20),
             Text(
-              'Mesh Messenger',
+              'Nebula Chat',
               style: GoogleFonts.inter(
                 color: MeshColors.textPrimary,
                 fontSize: 20,
@@ -123,7 +123,7 @@ class _MessengerScreenState extends State<MessengerScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Envie mensagens criptografadas via rede Mesh P2P.\nSem servidores. Sem rastreamento. Sem censura.',
+              'Envie mensagens E2EE fragmentadas via rede Nebula.\nDoe 5GB de espaço para a Nebula Cloud e ganhe boost na mineração.',
               textAlign: TextAlign.center,
               style: GoogleFonts.inter(
                 color: MeshColors.textMuted,
@@ -265,7 +265,7 @@ class _MessengerScreenState extends State<MessengerScreen> {
             onPressed: () {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('Fotos e áudio em breve!', style: GoogleFonts.inter()),
+                  content: Text('Fotos e áudios (até 1min) exigem doação de 5GB para a Nebula Cloud!', style: GoogleFonts.inter()),
                   backgroundColor: MeshColors.surface,
                   behavior: SnackBarBehavior.floating,
                 ),

@@ -2,44 +2,53 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 /// ═══════════════════════════════════════════════════════════════
-/// MeshCoin Design System — Neon Cyberpunk Theme
+/// Nebula Network Design System — Cosmic Nebula Theme
+/// "A rede está lá. Você só não vê."
 /// ═══════════════════════════════════════════════════════════════
 
 class MeshColors {
-  // Core
-  static const Color background = Color(0xFF0A0E1A);
-  static const Color surface = Color(0xFF111827);
-  static const Color surfaceLight = Color(0xFF1E293B);
-  static const Color glass = Color(0x991E293B); // 60% opacity
+  // Core — Deep Space
+  static const Color background = Color(0xFF060B18);   // Mais profundo, quase preto cósmico
+  static const Color surface = Color(0xFF0D1425);       // Superfície de espaço profundo
+  static const Color surfaceLight = Color(0xFF162040);  // Painel iluminado por estrelas
+  static const Color glass = Color(0x99162040);          // 60% opacity
 
-  // Neon Palette
-  static const Color neonCyan = Color(0xFF00F0FF);
-  static const Color neonViolet = Color(0xFF8B5CF6);
-  static const Color neonGreen = Color(0xFF10B981);
-  static const Color neonGold = Color(0xFFF59E0B);
-  static const Color neonRed = Color(0xFFEF4444);
-  static const Color neonPink = Color(0xFFEC4899);
+  // Nebula Palette — Inspirado em nebulosas reais (Carina, Orion, Pilares da Criação)
+  static const Color neonCyan = Color(0xFF00D4FF);      // Estrelas jovens e quentes
+  static const Color neonViolet = Color(0xFF7C3AED);    // Gás ionizado (violeta profundo)
+  static const Color neonGreen = Color(0xFF10B981);     // Nebulosa de emissão (verde)
+  static const Color neonGold = Color(0xFFF59E0B);      // Poeira estelar dourada
+  static const Color neonRed = Color(0xFFEF4444);       // Hidrogênio alfa
+  static const Color neonPink = Color(0xFFD946EF);      // Nebulosa rosada (Fúcsia cósmica)
+  static const Color nebulaDeepPurple = Color(0xFF4C1D95); // Coração da nebulosa
+  static const Color nebulaStar = Color(0xFFE0E7FF);    // Luz estelar pálida
 
   // Text
-  static const Color textPrimary = Color(0xFFF1F5F9);
+  static const Color textPrimary = Color(0xFFE8ECF5);
   static const Color textSecondary = Color(0xFF94A3B8);
   static const Color textMuted = Color(0xFF64748B);
 
-  // Gradients
+  // Gradients — Cósmicos
   static const LinearGradient neonGradient = LinearGradient(
-    colors: [neonCyan, neonViolet],
+    colors: [Color(0xFF00D4FF), Color(0xFF7C3AED), Color(0xFFD946EF)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );
 
   static const LinearGradient darkGradient = LinearGradient(
-    colors: [Color(0xFF0A0E1A), Color(0xFF111827)],
+    colors: [Color(0xFF060B18), Color(0xFF0D1425), Color(0xFF1A0A2E)],
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
   );
 
   static const LinearGradient goldGradient = LinearGradient(
     colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
+  static const LinearGradient nebulaGradient = LinearGradient(
+    colors: [Color(0xFF4C1D95), Color(0xFF7C3AED), Color(0xFFD946EF)],
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
   );

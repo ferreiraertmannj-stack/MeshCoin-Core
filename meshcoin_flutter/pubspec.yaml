@@ -1,6 +1,6 @@
 name: meshcoin_app
-description: MeshCoin - Rede Mesh Híbrida P2P | Criptomoeda Off-Grid
-version: 2.0.0+2
+description: Nebula Network — Blockchain Descentralizada, Chat E2EE e Armazenamento Distribuído
+version: 3.0.0+3
 environment:
   sdk: '>=3.0.0 <4.0.0'
 
@@ -14,7 +14,10 @@ dependencies:
   shared_preferences: ^2.3.5
   intl: ^0.19.0
   network_info_plus: ^6.1.0
-  nearby_connections: ^3.1.2
+  nearby_connections: ^4.3.0
+  permission_handler: ^11.3.1
+  bip39: ^1.0.6
+  path_provider: ^2.1.2
 
 flutter:
   uses-material-design: true

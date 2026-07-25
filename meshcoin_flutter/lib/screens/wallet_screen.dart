@@ -5,6 +5,8 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../theme/app_theme.dart';
 import '../crypto/wallet_crypto.dart';
 import '../mesh_node.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
 
 class WalletScreen extends StatefulWidget {
   final MeshNode meshNode;
@@ -36,29 +38,16 @@ class _WalletScreenState extends State<WalletScreen> {
 
   Future<void> _generateWallet() async {
     setState(() => _isGenerating = true);
-    await Future.delayed(const Duration(milliseconds: 800)); // UX delay
+    await Future.delayed(const Duration(milliseconds: 500)); // UX delay
     
     try {
-      Map<String, String> wallet = WalletCrypto.generateKeypair();
+      String mnemonic = WalletCrypto.generateMnemonic();
+      Map<String, String> wallet = WalletCrypto.generateKeypairFromMnemonic(mnemonic);
       await WalletCrypto.saveWallet(wallet);
       widget.onWalletGenerated(wallet);
       
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.check_circle, color: MeshColors.neonGreen),
-                const SizedBox(width: 8),
-                Text('Carteira gerada com criptografia real!', 
-                  style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-              ],
-            ),
-            backgroundColor: MeshColors.surface,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
+        _showMnemonicDialog(mnemonic);
       }
     } catch (e) {
       if (mounted) {
@@ -69,6 +58,123 @@ class _WalletScreenState extends State<WalletScreen> {
     }
     
     setState(() => _isGenerating = false);
+  }
+
+  void _showMnemonicDialog(String mnemonic) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: MeshColors.surface,
+          title: Text('Carteira Gerada', style: GoogleFonts.inter(color: MeshColors.textPrimary)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Guarde estas 24 palavras em local seguro. Elas são a ÚNICA forma de recuperar seu saldo.',
+                style: GoogleFonts.inter(color: MeshColors.neonRed, fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: MeshColors.background,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  mnemonic,
+                  style: GoogleFonts.jetBrainsMono(color: MeshColors.neonCyan, fontSize: 13),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: mnemonic));
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Copiado para a área de transferência!')));
+              },
+              child: Text('Copiar', style: GoogleFonts.inter(color: MeshColors.textMuted)),
+            ),
+            NeonButton(
+              label: 'Salvar TXT',
+              isSmall: true,
+              onPressed: () async {
+                try {
+                  final directory = await getExternalStorageDirectory();
+                  if (directory != null) {
+                    final file = File('${directory.path}/nebula_wallet_backup.txt');
+                    await file.writeAsString('Nebula Network - Backup de Recuperação\n\nFrase (24 palavras):\n$mnemonic\n\nNUNCA COMPARTILHE ISSO COM NINGUÉM.');
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Salvo em: ${file.path}')));
+                  }
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Erro ao salvar arquivo.')));
+                }
+              },
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('OK, Eu Salvei', style: GoogleFonts.inter(color: MeshColors.neonCyan)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _recoverWallet() async {
+    TextEditingController mnemonicController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: MeshColors.surface,
+          title: Text('Recuperar Carteira', style: GoogleFonts.inter(color: MeshColors.textPrimary)),
+          content: TextField(
+            controller: mnemonicController,
+            maxLines: 4,
+            style: GoogleFonts.inter(color: MeshColors.textPrimary),
+            decoration: InputDecoration(
+              hintText: 'Cole aqui suas 24 palavras separadas por espaço',
+              hintStyle: GoogleFonts.inter(color: MeshColors.textMuted),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Cancelar', style: GoogleFonts.inter(color: MeshColors.textMuted)),
+            ),
+            NeonButton(
+              label: 'Recuperar',
+              isSmall: true,
+              onPressed: () async {
+                Navigator.pop(context);
+                setState(() => _isGenerating = true);
+                await Future.delayed(const Duration(milliseconds: 500));
+                
+                try {
+                  String mnemonic = mnemonicController.text.trim();
+                  Map<String, String> wallet = WalletCrypto.generateKeypairFromMnemonic(mnemonic);
+                  await WalletCrypto.saveWallet(wallet);
+                  widget.onWalletGenerated(wallet);
+                  
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Carteira recuperada com sucesso!'), backgroundColor: MeshColors.neonGreen),
+                  );
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Erro: $e'), backgroundColor: MeshColors.neonRed),
+                  );
+                }
+                setState(() => _isGenerating = false);
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _sendPayment() {
@@ -184,7 +290,7 @@ class _WalletScreenState extends State<WalletScreen> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    '${widget.balance.toStringAsFixed(2)} MESH',
+                    '${widget.balance.toStringAsFixed(2)} NBL',
                     style: GoogleFonts.jetBrainsMono(
                       color: MeshColors.neonGreen,
                       fontSize: 13,
@@ -249,13 +355,32 @@ class _WalletScreenState extends State<WalletScreen> {
           Expanded(
             child: _isGenerating
                 ? const Center(child: CircularProgressIndicator(color: MeshColors.neonCyan))
-                : NeonButton(
-                    label: hasWallet ? 'Nova Carteira' : 'Gerar Carteira',
-                    icon: hasWallet ? Icons.refresh : Icons.add,
-                    onPressed: _generateWallet,
-                    gradient: hasWallet
-                        ? const LinearGradient(colors: [MeshColors.neonViolet, MeshColors.neonPink])
-                        : null,
+                : Column(
+                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        child: NeonButton(
+                          label: hasWallet ? 'Nova Carteira' : 'Criar Carteira',
+                          icon: hasWallet ? Icons.refresh : Icons.add,
+                          isSmall: true,
+                          onPressed: _generateWallet,
+                          gradient: hasWallet
+                              ? const LinearGradient(colors: [MeshColors.neonViolet, MeshColors.neonPink])
+                              : null,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: NeonButton(
+                          label: 'Recuperar',
+                          icon: Icons.settings_backup_restore,
+                          isSmall: true,
+                          onPressed: _recoverWallet,
+                          gradient: const LinearGradient(colors: [MeshColors.surfaceLight, MeshColors.textMuted]),
+                        ),
+                      ),
+                    ],
                   ),
           ),
           if (hasWallet) ...[
@@ -282,7 +407,7 @@ class _WalletScreenState extends State<WalletScreen> {
       child: Column(
         children: [
           Text(
-            'Escaneie para receber MESH',
+            'Escaneie para receber NBL',
             style: GoogleFonts.inter(
               color: MeshColors.textPrimary,
               fontSize: 14,
@@ -329,7 +454,7 @@ class _WalletScreenState extends State<WalletScreen> {
               const Icon(Icons.send, color: MeshColors.neonCyan, size: 20),
               const SizedBox(width: 8),
               Text(
-                'Enviar MESH',
+                'Enviar NBL',
                 style: GoogleFonts.inter(
                   color: MeshColors.textPrimary,
                   fontSize: 16,
@@ -357,7 +482,7 @@ class _WalletScreenState extends State<WalletScreen> {
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             style: GoogleFonts.jetBrainsMono(color: MeshColors.textPrimary, fontSize: 13),
             decoration: const InputDecoration(
-              labelText: 'Valor (MESH)',
+              labelText: 'Valor (NBL)',
               prefixIcon: Icon(Icons.monetization_on_outlined, color: MeshColors.textMuted, size: 20),
             ),
           ),
@@ -452,7 +577,7 @@ class _WalletScreenState extends State<WalletScreen> {
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
                         Text(
-                          '${isSent ? "-" : "+"}${tx['valor'] ?? '0'} MESH',
+                          '${isSent ? "-" : "+"}${tx['valor'] ?? '0'} NBL',
                           style: GoogleFonts.jetBrainsMono(
                             color: isSent ? MeshColors.neonRed : MeshColors.neonGreen,
                             fontWeight: FontWeight.w700,

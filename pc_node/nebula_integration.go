@@ -39,9 +39,9 @@ func uploadToNebulaCloud() {
 	multiPartWriter := multipart.NewWriter(&requestBody)
 
 	// O node_daemon.go da Nebula Cloud pede "nome" e o arquivo em "fragmento"
-	_ = multiPartWriter.WriteField("nome", "meshcoin_ledger_master.json")
+	_ = multiPartWriter.WriteField("nome", "nebula_ledger_master.json")
 
-	fileWriter, err := multiPartWriter.CreateFormFile("fragmento", "meshcoin_ledger_master.json")
+	fileWriter, err := multiPartWriter.CreateFormFile("fragmento", "nebula_ledger_master.json")
 	if err != nil {
 		log.Println("Erro no multipart:", err)
 		return

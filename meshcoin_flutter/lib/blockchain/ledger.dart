@@ -9,7 +9,7 @@ class Ledger extends ChangeNotifier {
   
   // Dificuldade da rede. Começando baixa para testes de celular (ex: 3)
   int difficulty = 3; 
-  final double miningReward = 50.0;
+  final double miningReward = 50.0; // 50 NBL
 
   Ledger() {
     chain.add(Block.genesis());
@@ -60,12 +60,9 @@ class Ledger extends ChangeNotifier {
     return true;
   }
 
-  /// Minera um novo bloco incluindo as transações da mempool
+  /// Minera um novo bloco incluindo as transações da mempool (permite blocos vazios na Nebula Network)
   Block? minePendingTransactions(String minerAddress, {Function(int hashes)? onProgress}) {
-    if (mempool.isEmpty) {
-      // Não minera bloco vazio nesta implementação para não sobrecarregar
-      return null;
-    }
+    // Permite mineração de blocos vazios para garantir que a rede avance e o PC Node valide.
 
     // Seleciona transações e cria a transação Coinbase
     List<Transaction> blockTxs = List.from(mempool);
