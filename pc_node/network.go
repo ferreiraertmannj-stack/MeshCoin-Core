@@ -7,12 +7,18 @@ import (
 	"net"
 	"strings"
 	"time"
+	"sync"
 )
 
 const (
 	udpPort = 5555
 	tcpPort = 5556
 	magic   = "NEBULA_NODE"
+)
+
+var (
+	activeTCPClients = make(map[net.Conn]bool)
+	tcpMutex         sync.Mutex
 )
 
 func startNetwork() {
@@ -81,7 +87,7 @@ func broadcastPresence() {
 }
 
 func listenTCP() {
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", tcpPort))
+	listener, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", tcpPort))
 	if err != nil {
 		log.Fatalf("Erro ao iniciar TCP: %v", err)
 	}
@@ -92,61 +98,135 @@ func listenTCP() {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			log.Println("Erro ao aceitar TCP:", err)
+			log.Println("❌ Erro ao aceitar conexão TCP:", err)
 			continue
 		}
-
+		log.Printf("📥 Nova conexão TCP aceita de: %s\n", conn.RemoteAddr().String())
 		go handleConnection(conn)
 	}
 }
 
 func handleConnection(conn net.Conn) {
-	defer conn.Close()
+	// Track active TCP connection for Relay
+	tcpMutex.Lock()
+	activeTCPClients[conn] = true
+	tcpMutex.Unlock()
+
+	defer func() {
+		tcpMutex.Lock()
+		delete(activeTCPClients, conn)
+		tcpMutex.Unlock()
+		conn.Close()
+	}()
+
 	decoder := json.NewDecoder(conn)
-	var packet map[string]interface{}
-
-	if err := decoder.Decode(&packet); err != nil {
-		return
-	}
-
-	// Tratamento do pacote vindo da Rede Mesh
-	tipo, ok := packet["tipo"].(string)
-	if !ok {
-		// Tenta verificar se é um pacote B.A.T.M.A.N aninhado
-		if rTipo, ok := packet["tipo"].(string); ok && rTipo == "DATA_ROUTE" {
-			payload, ok := packet["payload"].(map[string]interface{})
-			if ok {
-				tipo = payload["tipo"].(string)
-				packet = payload // extrai o payload interno
+	for {
+		var packet map[string]interface{}
+		err := decoder.Decode(&packet)
+		if err != nil {
+			if err.Error() != "EOF" {
+				log.Printf("❌ Erro leitura TCP %s: %v\n", conn.RemoteAddr().String(), err)
 			}
+			return // Break loop cleanly on EOF or disconnect
 		}
-	}
 
-	switch tipo {
-	case "NEW_BLOCK":
-		handleNewBlockPacket(packet)
-	case "NEW_TRANSACTION":
-		log.Println("Nova transação recebida na Mempool Global!")
-		// O Nó Completo guarda na sua própria mempool ou só loga
-	case "CHAT":
-		// Ignora mensagens de chat
-	default:
-		// Pacote desconhecido
+		tipo, ok := packet["tipo"].(string)
+		if !ok { continue }
+
+		switch tipo {
+		case "NEW_BLOCK":
+			log.Println("⛏️ Recebido NEW_BLOCK! Validando PoW...")
+			handleNewBlockPacket(packet, conn)
+		case "NEW_TRANSACTION":
+			log.Println("💸 Recebido NEW_TRANSACTION! Processando para Mempool...")
+			handleNewTransactionPacket(packet, conn)
+		case "DATA_ROUTE", "CHAT":
+			log.Println("🔄 Repassando pacote de CHAT/DATA P2P...")
+			broadcastTCP(packet, conn)
+		case "OGM", "PING":
+			// Keep-alive silencioso
+		default:
+			log.Printf("⚠️ TCP: Tipo desconhecido %s\n", tipo)
+		}
 	}
 }
 
-func handleNewBlockPacket(packet map[string]interface{}) {
+func broadcastTCP(packet map[string]interface{}, sender net.Conn) {
+	data, err := json.Marshal(packet)
+	if err != nil {
+		return
+	}
+	
+	// Envia para os clientes WebSocket também!
+	broadcast <- data
+	
+	tcpMutex.Lock()
+	defer tcpMutex.Unlock()
+
+	for client := range activeTCPClients {
+		if client != sender {
+			_, err := client.Write(data)
+			if err != nil {
+				client.Close()
+				delete(activeTCPClients, client)
+			}
+		}
+	}
+}
+
+func handleNewBlockPacket(packet map[string]interface{}, conn net.Conn) {
 	blockData, ok := packet["block"]
 	if !ok {
+		log.Println("❌ Falha na validação: pacote NEW_BLOCK não contém a chave 'block'")
+		if conn != nil { conn.Write([]byte(`{"status": "error", "message": "Missing block data"}`)) }
 		return
 	}
 
-	bytes, _ := json.Marshal(blockData)
+	bytesData, _ := json.Marshal(blockData)
 	var block Block
-	if err := json.Unmarshal(bytes, &block); err != nil {
-		log.Println("Erro ao converter bloco:", err)
+	if err := json.Unmarshal(bytesData, &block); err != nil {
+		log.Println("❌ Erro ao converter bloco do JSON:", err)
+		if conn != nil { conn.Write([]byte(`{"status": "error", "message": "Invalid JSON format"}`)) }
 		return
 	}
 
-	handleNewBlock(block)
+	success := handleNewBlock(block)
+	if success {
+		log.Println("✅ NEW_BLOCK processado com sucesso via TCP/WS.")
+		if conn != nil { conn.Write([]byte(`{"status": "success", "message": "Block appended to ledger"}`)) }
+	} else {
+		log.Println("❌ Bloco rejeitado pelo Ledger Mestre.")
+		if conn != nil { conn.Write([]byte(`{"status": "error", "message": "Block rejected by validation"}`)) }
+	}
+}
+
+func handleNewTransactionPacket(packet map[string]interface{}, conn net.Conn) {
+	txData, ok := packet["transaction"]
+	if !ok {
+		log.Println("❌ Pacote NEW_TRANSACTION inválido: sem campo 'transaction'")
+		return
+	}
+
+	bytesData, err := json.Marshal(txData)
+	if err != nil {
+		log.Println("❌ Erro ao converter tx para JSON interno:", err)
+		return
+	}
+
+	var tx Transaction
+	if err := json.Unmarshal(bytesData, &tx); err == nil {
+		added := HandleNewTransaction(tx)
+		if added {
+			broadcastTCP(packet, conn)
+			if conn != nil {
+				json.NewEncoder(conn).Encode(map[string]interface{}{"status": "success", "msg": "Transaction appended to Mempool"})
+			}
+		} else {
+			if conn != nil {
+				json.NewEncoder(conn).Encode(map[string]interface{}{"status": "error", "msg": "Transaction rejected"})
+			}
+		}
+	} else {
+		log.Println("❌ Falha ao dar unmarshal na transação recebida:", err)
+	}
 }

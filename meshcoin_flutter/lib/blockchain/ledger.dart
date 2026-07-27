@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import 'block.dart';
 import 'transaction.dart';
 
@@ -9,8 +11,8 @@ class Ledger extends ChangeNotifier {
   List<Block> chain = [];
   List<Transaction> mempool = [];
   
-  // Dificuldade da rede. Começando baixa para testes de celular (ex: 3)
-  int difficulty = 3; 
+  // Dificuldade da rede restaurada para produção (Proof of Work real)
+  int difficulty = 6; 
   final double miningReward = 50.0; // 50 NBL
 
   Ledger() {
@@ -39,6 +41,27 @@ class Ledger extends ChangeNotifier {
     return balance;
   }
 
+  /// Mapeia todos os usernames registrados e seus donos (Endereço)
+  Map<String, String> getRegisteredUsernames() {
+    Map<String, String> usernames = {};
+    for (var block in chain) {
+      for (var trans in block.transactions) {
+        if (trans.isUsernameRegistration()) {
+          // Apenas o primeiro registro ganha (imutável)
+          if (!usernames.containsKey(trans.receiverAddress)) {
+            usernames[trans.receiverAddress] = trans.senderAddress;
+          }
+        }
+      }
+    }
+    return usernames;
+  }
+
+  /// Resolve um nome (ex: @joao) para um endereço NBL...
+  String? resolveUsername(String username) {
+    return getRegisteredUsernames()[username];
+  }
+
   /// Adiciona uma transação na mempool após validá-la
   bool addTransaction(Transaction tx) {
     if (!tx.isValid()) {
@@ -47,8 +70,24 @@ class Ledger extends ChangeNotifier {
 
     if (tx.senderAddress != 'COINBASE') {
       double senderBalance = getBalanceOfAddress(tx.senderAddress);
-      if (senderBalance < (tx.amount + tx.fee)) {
+      double pendingOut = mempool
+          .where((t) => t.senderAddress == tx.senderAddress)
+          .fold(0.0, (sum, t) => sum + t.amount + t.fee);
+
+      if ((senderBalance - pendingOut) < (tx.amount + tx.fee)) {
         return false; // Saldo insuficiente
+      }
+    }
+
+    // Regra de unicidade de Username
+    if (tx.isUsernameRegistration()) {
+      Map<String, String> registered = getRegisteredUsernames();
+      if (registered.containsKey(tx.receiverAddress)) {
+        return false; // Username já registrado
+      }
+      // Checar se já não está pendente na mempool
+      if (mempool.any((t) => t.isUsernameRegistration() && t.receiverAddress == tx.receiverAddress)) {
+        return false;
       }
     }
 
@@ -63,14 +102,8 @@ class Ledger extends ChangeNotifier {
   }
 
   /// Minera um novo bloco incluindo as transações da mempool (permite blocos vazios na Nebula Network)
-  Block? minePendingTransactions(String minerAddress, {Function(int hashes)? onProgress}) {
-    // Agora temos um PoW Real (NeonHash), então removemos a trava artificial de 120s.
-    // O tempo de bloco é regulado nativamente pela dificuldade do algoritmo vetorial.
-
-    // Seleciona transações e cria a transação Coinbase
+  Future<Block?> minePendingTransactions(String minerAddress, {Function(int hashes)? onProgress}) async {
     List<Transaction> blockTxs = List.from(mempool);
-    
-    // Calcula taxas totais
     double totalFees = blockTxs.fold(0.0, (sum, tx) => sum + tx.fee);
     
     Transaction coinbaseTx = Transaction.createCoinbase(minerAddress, miningReward + totalFees);
@@ -88,16 +121,22 @@ class Ledger extends ChangeNotifier {
       hash: '',
     );
 
-    // Proof of Work: Mine
-    String target = '0' * difficulty;
-    int hashesAttempted = 0;
-    while (!newBlock.hash.startsWith(target)) {
-      newBlock.nonce++;
-      newBlock.hash = newBlock.calculateHash();
-      hashesAttempted++;
-      
-      if (hashesAttempted % 5000 == 0 && onProgress != null) {
-        onProgress(hashesAttempted);
+    // Usando Isolate.spawn para Proof of Work assíncrono real + FFI Bridge seguro
+    ReceivePort receivePort = ReceivePort();
+    await Isolate.spawn(_miningWorker, {
+      'sendPort': receivePort.sendPort,
+      'block': newBlock,
+      'difficulty': difficulty,
+    });
+
+    await for (var msg in receivePort) {
+      if (msg is int) {
+        if (onProgress != null) onProgress(msg);
+      } else if (msg is Map) {
+        newBlock.nonce = msg['nonce'];
+        newBlock.hash = msg['hash'];
+        receivePort.close();
+        break;
       }
     }
 
@@ -146,22 +185,62 @@ class Ledger extends ChangeNotifier {
 
   Future<bool> syncWithPCNode(String pcIp) async {
     try {
-      final response = await http.get(Uri.parse('http://$pcIp:8080/api/ledger'));
+      // Strip any port if the user accidentally included it
+      String cleanIp = pcIp.contains(':') ? pcIp.split(':')[0] : pcIp;
+      
+      print("Fazendo GET HTTP para: http://$cleanIp:8080/api/ledger");
+      final response = await http.get(Uri.parse('http://$cleanIp:8080/api/ledger')).timeout(const Duration(seconds: 5));
+      
       if (response.statusCode == 200) {
         List<dynamic> jsonBlocks = json.decode(response.body);
         
         List<Block> newChain = jsonBlocks.map((b) => Block.fromJson(b)).toList();
         
-        // Substitui a chain local se a recebida for maior e válida
-        if (newChain.length > chain.length) {
+        // O PC Node é o Ledger Mestre. Sempre sincronizamos com ele para evitar forks isolados (Desync de Saldo).
+        if (newChain.isNotEmpty) { 
           chain = newChain;
+          
+          // Gravação Local: sobrescrever o ledger.json local do smartphone
+          if (!kIsWeb) {
+            final directory = await getApplicationDocumentsDirectory();
+            final file = File('${directory.path}/ledger.json');
+            await file.writeAsString(response.body);
+          }
+          
           notifyListeners();
           return true;
         }
+      } else {
+        print("Erro HTTP: \${response.statusCode}");
       }
     } catch (e) {
-      print("Erro ao sincronizar Ledger do PC: $e");
+      print("Erro ao sincronizar Ledger via HTTP: $e");
     }
     return false;
   }
+}
+
+// Top-Level function isolada para rodar o NeonHash sem travar a UI
+void _miningWorker(Map<String, dynamic> args) {
+  SendPort sendPort = args['sendPort'];
+  Block block = args['block'];
+  int difficulty = args['difficulty'];
+
+  String target = '0' * difficulty;
+  int hashesAttempted = 0;
+  
+  while (!block.hash.startsWith(target)) {
+    block.nonce++;
+    block.hash = block.calculateHash();
+    hashesAttempted++;
+    
+    if (hashesAttempted % 2000 == 0) {
+      sendPort.send(hashesAttempted);
+    }
+  }
+  
+  sendPort.send({
+    'nonce': block.nonce,
+    'hash': block.hash,
+  });
 }

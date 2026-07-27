@@ -1,10 +1,12 @@
 import 'dart:convert';
+import 'dart:isolate' as isolate;
 import 'dart:math';
 import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:pointycastle/export.dart' as pc;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:bip39/bip39.dart' as bip39;
+import 'package:pointycastle/random/fortuna_random.dart';
 
 /// ═══════════════════════════════════════════════════════════════
 /// Nebula Wallet Crypto — BIP39 + Híbrida (ECDSA secp256k1 + PQC-Ready)
@@ -23,7 +25,12 @@ class WalletCrypto {
     return bip39.validateMnemonic(mnemonic);
   }
 
-  /// Gera a chave Híbrida (ECDSA + Preparado para PQC) a partir do Mnemonic
+  /// Gera a chave Híbrida em background (Isolate) para evitar travamento da UI
+  static Future<Map<String, String>> generateKeypairFromMnemonicAsync(String mnemonic) async {
+    return await isolate.Isolate.run(() => generateKeypairFromMnemonic(mnemonic));
+  }
+
+  /// Gera a chave Híbrida (ECDSA + Preparado para PQC) a partir do Mnemonic (Síncrono)
   static Map<String, String> generateKeypairFromMnemonic(String mnemonic) {
     if (!validateMnemonic(mnemonic)) {
       throw Exception('Frase de recuperação inválida.');
@@ -108,16 +115,33 @@ class WalletCrypto {
     // Hash da transação
     var txHash = sha256.convert(utf8.encode(txData)).bytes;
 
-    // Assinar com ECDSA
-    final signer = pc.ECDSASigner(pc.SHA256Digest());
-    signer.init(true, pc.PrivateKeyParameter<pc.ECPrivateKey>(privateKey));
+    // Assinar com ECDSA usando pre-computed hash (digest null)
+    final signer = pc.ECDSASigner(null);
+    
+    // Configurar SecureRandom para evitar RegistryFactoryException
+    final secureRandom = pc.FortunaRandom();
+    final seedSource = Random.secure();
+    final seeds = <int>[];
+    for (int i = 0; i < 32; i++) {
+      seeds.add(seedSource.nextInt(256));
+    }
+    secureRandom.seed(pc.KeyParameter(Uint8List.fromList(seeds)));
+
+    signer.init(true, pc.ParametersWithRandom(pc.PrivateKeyParameter<pc.ECPrivateKey>(privateKey), secureRandom));
 
     pc.ECSignature signature = signer.generateSignature(Uint8List.fromList(txHash)) as pc.ECSignature;
 
-    String r = signature.r.toRadixString(16).padLeft(64, '0');
-    String s = signature.s.toRadixString(16).padLeft(64, '0');
+    // Forçar Low-S para compatibilidade com o secp256k1 do Go Node
+    BigInt s = signature.s;
+    BigInt halfN = _params.n >> 1;
+    if (s.compareTo(halfN) > 0) {
+      s = _params.n - s;
+    }
 
-    return '$r$s';
+    String rStr = signature.r.toRadixString(16).padLeft(64, '0');
+    String sStr = s.toRadixString(16).padLeft(64, '0');
+
+    return '$rStr$sStr';
   }
 
   /// Verifica uma assinatura ECDSA
@@ -137,7 +161,7 @@ class WalletCrypto {
         BigInt.parse(sHex, radix: 16),
       );
 
-      final verifier = pc.ECDSASigner(pc.SHA256Digest());
+      final verifier = pc.ECDSASigner(null);
       verifier.init(false, pc.PublicKeyParameter<pc.ECPublicKey>(publicKey));
 
       return verifier.verifySignature(Uint8List.fromList(txHash), sig);
@@ -150,9 +174,9 @@ class WalletCrypto {
 
   static Future<void> saveWallet(Map<String, String> wallet) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('mesh_privateKey', wallet['privateKey']!);
-    await prefs.setString('mesh_publicKey', wallet['publicKey']!);
-    await prefs.setString('mesh_address', wallet['address']!);
+    await prefs.setString('nebula_privateKey', wallet['privateKey']!);
+    await prefs.setString('nebula_publicKey', wallet['publicKey']!);
+    await prefs.setString('nebula_address', wallet['address']!);
     if (wallet.containsKey('mnemonic')) {
       await prefs.setString('nebula_mnemonic', wallet['mnemonic']!);
     }
@@ -160,9 +184,9 @@ class WalletCrypto {
 
   static Future<Map<String, String>?> loadWallet() async {
     final prefs = await SharedPreferences.getInstance();
-    String? privateKey = prefs.getString('mesh_privateKey');
-    String? publicKey = prefs.getString('mesh_publicKey');
-    String? address = prefs.getString('mesh_address');
+    String? privateKey = prefs.getString('nebula_privateKey');
+    String? publicKey = prefs.getString('nebula_publicKey');
+    String? address = prefs.getString('nebula_address');
 
     if (privateKey != null && publicKey != null && address != null) {
       return {

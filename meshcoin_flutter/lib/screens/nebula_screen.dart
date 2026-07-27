@@ -9,7 +9,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
-
+import 'dart:isolate';
 class NebulaScreen extends StatefulWidget {
   const NebulaScreen({super.key});
 
@@ -64,20 +64,39 @@ class _NebulaScreenState extends State<NebulaScreen> {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setDouble('nebula_allocated_gb', gb);
     
-    // Alocação Real (criando o arquivo de fato para preencher a memória, como pedido pelo usuário)
-    try {
-      if (!kIsWeb) {
+    if (!kIsWeb && !Platform.isWindows && !Platform.isMacOS && !Platform.isLinux) {
+      try {
         final dir = await getApplicationDocumentsDirectory();
-        final file = File('${dir.path}/nebula_claim.dat');
+        final path = '${dir.path}/nebula_claim.dat';
         
-        // Abre o arquivo e escreve blocos vazios até dar o tamanho
-        // NOTA: Para evitar estourar o limite muito rápido e travar o celular no teste, criamos o arquivo vazio e setamos o length (sparse file em sistemas suportados)
-        var raf = await file.open(mode: FileMode.write);
-        await raf.truncate((gb * 1024 * 1024 * 1024).toInt());
-        await raf.close();
+        // Mover a escrita pesada para Isolate para não travar a UI (não funcionar)
+        await Isolate.run(() async {
+          final file = File(path);
+          if (file.existsSync()) {
+            file.deleteSync();
+          }
+          
+          var raf = file.openSync(mode: FileMode.write);
+          int targetBytes = (gb * 1024 * 1024 * 1024).toInt();
+          int chunkSize = 1024 * 1024; // 1 MB
+          int written = 0;
+          List<int> chunk = List.filled(chunkSize, 0); 
+          
+          while (written < targetBytes) {
+            int toWrite = (targetBytes - written) > chunkSize ? chunkSize : (targetBytes - written);
+            if (toWrite < chunkSize) {
+              raf.writeFromSync(List.filled(toWrite, 0));
+            } else {
+              raf.writeFromSync(chunk);
+            }
+            written += toWrite;
+          }
+          raf.closeSync();
+        });
+        print("Nebula Cloud: $gb GB fisicamente alocados no Android em $path");
+      } catch (e) {
+        print("Erro ao alocar espaço físico no celular: $e");
       }
-    } catch (e) {
-      print("Erro ao alocar espaço físico no celular: $e");
     }
   }
 

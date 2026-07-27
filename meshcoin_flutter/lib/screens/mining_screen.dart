@@ -1,9 +1,13 @@
 import 'dart:async';
 import 'dart:math';
+import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
 import '../blockchain/ledger.dart';
+import '../blockchain/block.dart';
 import '../mesh_node.dart';
 
 class MiningScreen extends StatefulWidget {
@@ -87,34 +91,31 @@ class _MiningScreenState extends State<MiningScreen> with TickerProviderStateMix
 
   Future<void> _mineLoop() async {
     while (_isMining && mounted) {
-      // Pequena pausa para a UI respirar e pegar blocos/transações que chegam
       await Future.delayed(const Duration(milliseconds: 500));
       if (!_isMining || !mounted) break;
 
       int t0 = DateTime.now().millisecondsSinceEpoch;
       int hashesDone = 0;
 
-      // Chama a mineração real do ledger (síncrona na UI, por isso blocos vazios ou diff alta podem travar)
-      // Como diff=3 é rápido (média de 4096 hashes), roda quase instantâneo.
-      var newBlock = widget.ledger.minePendingTransactions(
+      // Chama a mineração (agora assíncrona, não trava a UI por 100%)
+      var newBlock = await widget.ledger.minePendingTransactions(
         widget.minerAddress,
         onProgress: (h) {
+          if (!mounted) return;
+          int now = DateTime.now().millisecondsSinceEpoch;
+          int dt = max(1, now - t0);
           hashesDone = h;
-          if (mounted) {
-            setState(() {
-              _currentHash = List.generate(64, (_) => Random().nextInt(16).toRadixString(16)).join();
-            });
-          }
+          setState(() {
+            _hashRate = (hashesDone / dt) * 1000;
+            _totalHashes += 2000;
+            _currentHash = List.generate(64, (_) => Random().nextInt(16).toRadixString(16)).join();
+          });
         },
       );
-
-      int dt = DateTime.now().millisecondsSinceEpoch - t0;
 
       if (newBlock != null && mounted) {
         setState(() {
           _blocksFound++;
-          _totalHashes += hashesDone;
-          _hashRate = (hashesDone / max(1, dt)) * 1000;
           _currentHash = newBlock.hash;
         });
 
@@ -127,19 +128,69 @@ class _MiningScreenState extends State<MiningScreen> with TickerProviderStateMix
           ),
         );
 
-        // Broadcast o novo bloco na rede Mesh!
-        widget.meshNode.sendRoutedData('BROADCAST', {
-          'tipo': 'NEW_BLOCK',
-          'block': newBlock.toJson(),
-        });
+        _transmitBlockToPC(newBlock);
+      }
+    }
+  }
+
+  Future<void> _transmitBlockToPC(Block newBlock) async {
+    final prefs = await SharedPreferences.getInstance();
+    String? pcIp = prefs.getString('pc_node_ip');
+    if (pcIp != null && pcIp.contains(':')) {
+      pcIp = pcIp.split(':')[0];
+    }
+    
+    if (pcIp == null || pcIp.isEmpty) {
+      print("⚠️ IP do PC Node não configurado. Transmitindo apenas via Mesh.");
+      widget.meshNode.sendRoutedData('BROADCAST', {
+        'tipo': 'NEW_BLOCK',
+        'block': newBlock.toJson(),
+      });
+      return;
+    }
+
+    try {
+      print("🔌 Tentando enviar bloco para o PC Node em $pcIp:5556 (TCP)...");
+      Socket socket = await Socket.connect(pcIp, 5556, timeout: const Duration(seconds: 5));
+      
+      final payload = json.encode({
+        'tipo': 'NEW_BLOCK',
+        'block': newBlock.toJson()
+      });
+      
+      socket.write('$payload\n');
+      await socket.flush();
+
+      // Aguarda resposta
+      socket.listen(
+        (List<int> data) async {
+          final response = utf8.decode(data);
+          print("📥 Resposta do PC Node: $response");
+          if (response.contains('"error"')) {
+            print("❌ Bloco rejeitado! Desync detectado. Ressincronizando com a rede principal...");
+            bool synced = await widget.ledger.syncWithPCNode(pcIp!);
+            if (synced) print("✅ Ledger re-sincronizado.");
+          }
+          socket.destroy();
+        },
+        onError: (error) {
+          print("❌ Erro na resposta do socket TCP: $error");
+          socket.destroy();
+        },
+        onDone: () {
+          socket.destroy();
+        }
+      );
+    } catch (e) {
+      print("❌ Conexão TCP falhou durante a mineração: $e");
+      print("🔄 Tentando re-sincronizar o ledger local com o PC Node e retransmitir...");
+      
+      // Tenta re-sincronizar o Ledger (HTTP port 8080)
+      bool synced = await widget.ledger.syncWithPCNode(pcIp);
+      if (synced) {
+        print("✅ Re-sincronização bem sucedida. O bloco minerado localmente foi possivelmente superado.");
       } else {
-        // Se ainda não deu 2 minutos, roda um hashing "dummy" simulando o PoW contínuo
-        setState(() {
-          final rng = Random();
-          _hashRate = 120 + rng.nextDouble() * 80; // H/s ARM simulado
-          _totalHashes += (_hashRate * 0.5).round();
-          _currentHash = List.generate(64, (_) => rng.nextInt(16).toRadixString(16)).join();
-        });
+        print("❌ Re-sincronização falhou. Node offline ou inatingível.");
       }
     }
   }

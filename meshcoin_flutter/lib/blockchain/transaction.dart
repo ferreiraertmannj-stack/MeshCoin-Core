@@ -43,9 +43,22 @@ class Transaction {
     }
 
     // 4. Regras de negócio
-    if (amount <= 0 || fee < 0) return false;
+    if (amount < 0 || fee < 0) return false;
+
+    // 5. Validação de Registro de Username
+    if (isUsernameRegistration()) {
+      // Username precisa ter no mínimo 3 caracteres (incluindo o @) e sem espaços
+      if (receiverAddress.length < 3 || receiverAddress.contains(' ')) return false;
+      // Taxa fixa para evitar spam (ex: 1 NBL queimado)
+      if (amount < 1.0) return false;
+    }
 
     return true;
+  }
+
+  /// Verifica se esta transação é um pedido de registro de nome de usuário (ex: @nome)
+  bool isUsernameRegistration() {
+    return receiverAddress.startsWith('@');
   }
 
   Map<String, dynamic> toJson() {

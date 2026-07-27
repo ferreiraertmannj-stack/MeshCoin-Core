@@ -7,8 +7,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"os"
+	"strings"
 	"sync"
+	
+	"github.com/decred/dcrd/dcrec/secp256k1/v4"
+	"github.com/decred/dcrd/dcrec/secp256k1/v4/ecdsa"
 )
 
 // BlockHeader and Transaction structures
@@ -31,7 +34,7 @@ type Block struct {
 	MerkleRoot   string        `json:"merkleRoot"`
 	Nonce        int           `json:"nonce"`
 	Hash         string        `json:"hash"`
-	MinerStorage int           `json:"minerStorageGB"` // Nebula Cloud Storage Pledge
+	MinerStorage int           `json:"minerStorage"` // Nebula Cloud Storage Pledge
 	StorageType  string        `json:"storageType"`    // "SSD" ou "HDD"
 	Transactions []Transaction `json:"transactions"`
 }
@@ -41,35 +44,43 @@ type Ledger struct {
 	mu    sync.RWMutex
 }
 
-var ledger = Ledger{
-	Chain: []Block{},
-}
+var (
+	ledger = Ledger{Chain: []Block{}}
+	PendingTransactions []Transaction
+	mempoolMutex sync.Mutex
+)
 
 const ledgerFile = "ledger.json"
 
 // Load or create genesis block
 func initLedger() {
-	if _, err := os.Stat(ledgerFile); os.IsNotExist(err) {
-		log.Println("Criando novo Ledger Mestre com Bloco Gênesis...")
-		genesis := Block{
-			Index:        0,
-			Timestamp:    1672531200000,
-			PreviousHash: "0000000000000000000000000000000000000000000000000000000000000000",
-			MerkleRoot:   "",
-			Nonce:        0,
-			Hash:         "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
-			MinerStorage: 0,
-			StorageType:  "SSD",
-			Transactions: []Transaction{},
+	var file []byte
+	var err error
+
+	if file, err = ioutil.ReadFile(ledgerFile); err == nil {
+		if jsonErr := json.Unmarshal(file, &ledger.Chain); jsonErr == nil && len(ledger.Chain) > 0 {
+			log.Printf("Ledger Mestre existente carregado com %d blocos.\n", len(ledger.Chain))
+			return
+		} else {
+			log.Println("⚠️ ledger.json corrompido ou vazio. Recriando Bloco Gênesis...")
 		}
-		ledger.Chain = append(ledger.Chain, genesis)
-		saveLedger()
 	} else {
-		log.Println("Carregando Ledger Mestre existente...")
-		file, _ := ioutil.ReadFile(ledgerFile)
-		json.Unmarshal(file, &ledger.Chain)
-		log.Printf("Ledger carregado com %d blocos.\n", len(ledger.Chain))
+		log.Println("Criando novo Ledger Mestre com Bloco Gênesis...")
 	}
+
+	genesis := Block{
+		Index:        0,
+		Timestamp:    1672531200000,
+		PreviousHash: "0000000000000000000000000000000000000000000000000000000000000000",
+		MerkleRoot:   "",
+		Nonce:        0,
+		Hash:         "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
+		MinerStorage: 0,
+		StorageType:  "SSD",
+		Transactions: []Transaction{},
+	}
+	ledger.Chain = []Block{genesis}
+	saveLedger()
 }
 
 func saveLedger() {
@@ -140,6 +151,11 @@ func CalculateBlockReward(blockIndex int, minerStorageGB int, storageType string
 	return baseReward + bonus
 }
 
+func VerifyNeonHash(block Block) bool {
+	computed := calculateHash(block)
+	return computed == block.Hash
+}
+
 func handleNewBlock(block Block) bool {
 	ledger.mu.Lock()
 	defer ledger.mu.Unlock()
@@ -157,19 +173,43 @@ func handleNewBlock(block Block) bool {
 
 	// Valida se o bloco bate com nossa chain
 	if block.PreviousHash != lastBlock.Hash {
-		log.Printf("Bloco %d rejeitado: PreviousHash inválido\n", block.Index)
+		log.Printf("❌ Bloco %d rejeitado: PreviousHash inválido\n", block.Index)
 		return false
 	}
 
-	// Verifica o Hash do bloco recebido
-	computed := calculateHash(block)
-	if computed != block.Hash {
-		log.Printf("Bloco %d rejeitado: Hash calculado %s != %s\n", block.Index, computed, block.Hash)
+	// Verifica o Hash do bloco recebido usando a validação NeonHash
+	if !VerifyNeonHash(block) {
+		log.Printf("❌ Bloco %d rejeitado: PoW NeonHash Inválido\n", block.Index)
 		return false
+	}
+
+	// Valida cada transação dentro do bloco
+	for _, tx := range block.Transactions {
+		if tx.SenderAddress != "COINBASE" {
+			if !VerifyTransaction(tx) {
+				log.Printf("❌ Bloco %d rejeitado: Transação %s inválida\n", block.Index, tx.ID)
+				return false
+			}
+		}
 	}
 
 	ledger.Chain = append(ledger.Chain, block)
 	log.Printf("✅ Bloco #%d validado e adicionado ao Ledger Mestre!\n", block.Index)
+
+	// Remove as transações mineradas da Mempool Global (PendingTransactions)
+	mempoolMutex.Lock()
+	minedTxIDs := make(map[string]bool)
+	for _, tx := range block.Transactions {
+		minedTxIDs[tx.ID] = true
+	}
+	newPending := make([]Transaction, 0)
+	for _, pTx := range PendingTransactions {
+		if !minedTxIDs[pTx.ID] {
+			newPending = append(newPending, pTx)
+		}
+	}
+	PendingTransactions = newPending
+	mempoolMutex.Unlock()
 
 	// A cada 10 blocos, envia para a Nebula Cloud
 	if block.Index%10 == 0 {
@@ -182,8 +222,112 @@ func handleNewBlock(block Block) bool {
 }
 
 func getLedgerJSON() []byte {
-	ledger.mu.RLock()
-	defer ledger.mu.RUnlock()
-	data, _ := json.Marshal(ledger.Chain)
+	// Força a leitura direta do arquivo em disco
+	data, err := ioutil.ReadFile(ledgerFile)
+	if err != nil {
+		// Fallback para memória se o arquivo não estiver disponível por algum motivo
+		ledger.mu.RLock()
+		defer ledger.mu.RUnlock()
+		mData, _ := json.Marshal(ledger.Chain)
+		return mData
+	}
 	return data
+}
+
+func formatDartDouble(v float64) string {
+	s := fmt.Sprintf("%v", v)
+	if !strings.Contains(s, ".") {
+		s += ".0"
+	}
+	return s
+}
+
+func VerifyTransaction(tx Transaction) bool {
+	if tx.SenderAddress == "COINBASE" {
+		return true
+	}
+
+	// 1. Rebuild txData exactly as Dart does
+	txData := fmt.Sprintf("%s:%s:%s:%s:%s:%d",
+		tx.SenderPubKey,
+		tx.SenderAddress,
+		tx.ReceiverAddress,
+		formatDartDouble(tx.Amount),
+		formatDartDouble(tx.Fee),
+		tx.Timestamp,
+	)
+
+	// 2. Verify hash
+	hashBytes := sha256.Sum256([]byte(txData))
+	computedHash := hex.EncodeToString(hashBytes[:])
+	if computedHash != tx.ID {
+		log.Printf("❌ Tx %s rejeitada: ID/Hash inválido (Calculado: %s)\n", tx.ID, computedHash)
+		return false
+	}
+
+	// 3. Verify Signature
+	if len(tx.Signature) != 128 {
+		return false
+	}
+	pubKeyBytes, err := hex.DecodeString(tx.SenderPubKey)
+	if err != nil {
+		return false
+	}
+	pubKey, err := secp256k1.ParsePubKey(pubKeyBytes)
+	if err != nil {
+		return false
+	}
+
+	rBytes, _ := hex.DecodeString(tx.Signature[:64])
+	sBytes, _ := hex.DecodeString(tx.Signature[64:])
+	var r, s secp256k1.ModNScalar
+	r.SetByteSlice(rBytes)
+	s.SetByteSlice(sBytes)
+
+	sig := ecdsa.NewSignature(&r, &s)
+	if !sig.Verify(hashBytes[:], pubKey) {
+		log.Printf("❌ Tx %s rejeitada: Assinatura inválida\n", tx.ID)
+		return false
+	}
+
+	return true
+}
+
+func HandleNewTransaction(tx Transaction) bool {
+	if !VerifyTransaction(tx) {
+		return false
+	}
+
+	// Verify balance (Simple O(N) sweep of the ledger)
+	ledger.mu.RLock()
+	balance := 0.0
+	for _, block := range ledger.Chain {
+		for _, bTx := range block.Transactions {
+			if bTx.ReceiverAddress == tx.SenderAddress {
+				balance += bTx.Amount
+			}
+			if bTx.SenderAddress == tx.SenderAddress {
+				balance -= (bTx.Amount + bTx.Fee)
+			}
+		}
+	}
+	ledger.mu.RUnlock()
+
+	// Consider mempool pending balance
+	mempoolMutex.Lock()
+	defer mempoolMutex.Unlock()
+	for _, pTx := range PendingTransactions {
+		if pTx.SenderAddress == tx.SenderAddress {
+			balance -= (pTx.Amount + pTx.Fee)
+		}
+	}
+
+	if balance < (tx.Amount + tx.Fee) {
+		log.Printf("❌ Tx %s rejeitada: Saldo insuficiente (%.2f)\n", tx.ID, balance)
+		return false
+	}
+
+	PendingTransactions = append(PendingTransactions, tx)
+	log.Printf("✅ Transação %s validada e adicionada à Mempool Global!\n", tx.ID)
+	return true
 }

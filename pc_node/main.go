@@ -3,20 +3,43 @@ package main
 import (
 	"fmt"
 	"log"
+	"net"
+	"strings"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"encoding/json"
 	"github.com/gorilla/websocket"
 )
+
+func displayLocalIPs() {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return
+	}
+	fmt.Println("--------------------------------------------------")
+	for _, address := range addrs {
+		if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+			if ipnet.IP.To4() != nil {
+				ip := ipnet.IP.String()
+				// Ignora interfaces virtuais APIPA e Docker se possível foca nas principais
+				if strings.HasPrefix(ip, "192.168.") || strings.HasPrefix(ip, "10.") || strings.HasPrefix(ip, "172.") {
+					fmt.Printf("✅ PC Node rodando no IP: %s\n", ip)
+				}
+			}
+		}
+	}
+	fmt.Println("--------------------------------------------------")
+}
 
 func main() {
 	fmt.Println("==================================================")
 	fmt.Println("🚀 NEBULA NETWORK FULL NODE (PC) INICIADO 🚀")
 	fmt.Println("==================================================")
+	displayLocalIPs()
 	fmt.Println("Este nó escutará os celulares da rede P2P e salvará")
 	fmt.Println("os blocos validados no Ledger Mestre (ledger.json).")
-	fmt.Println("O Ledger será feito o backup na Nebula Cloud (porta 8000).")
 	fmt.Println("==================================================")
 
 	// Inicializa o Ledger (Lê do disco ou cria Genesis)
@@ -98,7 +121,29 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 			delete(clients, ws)
 			break
 		}
-		// Recebeu mensagem PQC, vamos rotear para todos online
+		
+		// Converte a mensagem para verificar se é um Bloco
+		var packet map[string]interface{}
+		if err := json.Unmarshal(msg, &packet); err == nil {
+			// Verifica se está encapsulado
+			tipo, ok := packet["tipo"].(string)
+			if ok && tipo == "DATA_ROUTE" {
+				if payload, pOk := packet["payload"].(map[string]interface{}); pOk {
+					tipo = payload["tipo"].(string)
+					packet = payload
+				}
+			}
+
+			if ok {
+				if tipo == "NEW_BLOCK" {
+					handleNewBlockPacket(packet, nil)
+				} else if tipo == "HANDSHAKE" {
+					log.Println("🤝 Handshake recebido do aplicativo Flutter!")
+				}
+			}
+		}
+
+		// Roteia a mensagem para todos os outros nós conectados
 		broadcast <- msg
 	}
 }

@@ -1,16 +1,19 @@
 import 'dart:math';
 import 'dart:io';
 import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'theme/app_theme.dart';
-import 'widgets/status_dot.dart';
 import 'screens/messenger_screen.dart';
 import 'screens/nebula_screen.dart';
 import 'screens/marketplace_screen.dart';
+import 'screens/wallet_screen.dart';
 import 'screens/mining_screen.dart';
 import 'screens/settings_screen.dart';
 import 'mesh_node.dart';
+import 'screens/mining_screen.dart';
 import 'crypto/wallet_crypto.dart';
 import 'crypto/pqc.dart';
 import 'tunneling/mesh_tunnel.dart';
@@ -245,14 +248,47 @@ class _MeshCoinShellState extends State<MeshCoinShell> {
   }
 
   Future<void> _initializeNetwork() async {
-    if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
-      // Modo Desktop Sidecar: Bypass nas permissões Android e não inicia MeshNode nativo
-      debugPrint("🖥️ MODO DESKTOP ATIVADO: O nó Go Sidecar gerencia a rede.");
-      return;
+    if (!Platform.isWindows && !Platform.isLinux && !Platform.isMacOS) {
+      await _requestPermissions();
     }
     
-    await _requestPermissions();
+    // Inicia o MeshNode (No desktop ele vai ligar apenas o WebSocket Bridge)
     await meshNode.start();
+    
+    // Tenta baixar a Blockchain real do Go Node (Sidecar) se existir
+    _syncLedgerFromGoNode();
+  }
+
+  Future<void> _syncLedgerFromGoNode() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      String bridgeIp = prefs.getString('pc_node_ip') ?? '';
+      
+      // Remove a porta se o usuário salvou com a porta acidentalmente
+      if (bridgeIp.contains(':')) {
+        bridgeIp = bridgeIp.split(':')[0];
+      }
+
+      if ((bridgeIp.isEmpty || bridgeIp == '127.0.0.1') && meshNode.directPeers.isNotEmpty) {
+        bridgeIp = meshNode.directPeers.first.split(':')[0];
+      }
+
+      if (bridgeIp.isNotEmpty && bridgeIp != '127.0.0.1') {
+        print("🔗 Tentando Sync Automático com PC Node: $bridgeIp");
+        bool success = await ledger.syncWithPCNode(bridgeIp);
+        if (success) {
+          if (mounted) setState(() {});
+          print("✅ Ledger Sincronizado automaticamente no startup!");
+        }
+      } else {
+        // Tenta novamente em 3 segundos caso o UDP broadcast chegue um pouco depois
+        Future.delayed(const Duration(seconds: 3), () {
+          if (mounted) _syncLedgerFromGoNode();
+        });
+      }
+    } catch (e) {
+      print("⚠️ Falha ao baixar ledger do Go Node no startup: $e");
+    }
   }
 
   Future<void> _requestPermissions() async {
@@ -283,9 +319,22 @@ class _MeshCoinShellState extends State<MeshCoinShell> {
 
   void _handleIncomingPacket(Map<String, dynamic> packet) {
     if (!mounted) return;
+    
+    // Desempacota pacotes roteados pelo PC Node (DATA_ROUTE)
+    if (packet['tipo'] == 'DATA_ROUTE' && packet.containsKey('payload')) {
+      packet = packet['payload'] as Map<String, dynamic>;
+    }
+    
     String tipo = packet['tipo'] ?? '';
 
     if (tipo == 'CHAT') {
+      String destAddress = packet['destinatarioAddress'] ?? packet['destinatario'] ?? '';
+      
+      // Se não for broadcast e não for pra mim, ignora (já que agora usamos BROADCAST no roteamento B.A.T.M.A.N.)
+      if (destAddress != 'BROADCAST' && destAddress != _address) {
+        return;
+      }
+
       String payload = packet['texto'] ?? '';
       
       if (payload.startsWith("NBL_PQC_V1::")) {
@@ -303,7 +352,7 @@ class _MeshCoinShellState extends State<MeshCoinShell> {
       });
     } else if (tipo == 'NEW_TRANSACTION') {
       try {
-        var tx = Transaction.fromJson(packet['tx']);
+        var tx = Transaction.fromJson(packet['transaction'] ?? packet['tx']);
         bool added = ledger.addTransaction(tx);
         if (added) {
           transactions.add({
@@ -333,7 +382,7 @@ class _MeshCoinShellState extends State<MeshCoinShell> {
     });
   }
 
-  void _onSendPayment(String dest, String valor) {
+  void _onSendPayment(String dest, String valor) async {
     if (_address == 'Não gerada') return;
 
     double amount = double.tryParse(valor) ?? 0.0;
@@ -352,12 +401,35 @@ class _MeshCoinShellState extends State<MeshCoinShell> {
     bool added = ledger.addTransaction(tx);
     
     if (added) {
-      // Broadcast para os nós
+      // 1. Enviar para a Rede Mesh Offline
       Map<String, dynamic> packet = {
         'tipo': 'NEW_TRANSACTION',
         'tx': tx.toJson(),
       };
       meshNode.sendRoutedData('BROADCAST', packet);
+
+      // 2. Enviar diretamente via TCP para o PC Node (Mempool Global)
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        String bridgeIp = prefs.getString('pc_node_ip') ?? '';
+        if (bridgeIp.contains(':')) bridgeIp = bridgeIp.split(':')[0];
+
+        if (bridgeIp.isNotEmpty && bridgeIp != '127.0.0.1') {
+          print("📡 Enviando NEW_TRANSACTION para Mempool do PC Node: $bridgeIp:5556");
+          Socket socket = await Socket.connect(bridgeIp, 5556, timeout: const Duration(seconds: 3));
+          
+          Map<String, dynamic> tcpPacket = {
+            'tipo': 'NEW_TRANSACTION',
+            'transaction': tx.toJson(),
+          };
+          
+          socket.write('${json.encode(tcpPacket)}\n');
+          await socket.flush();
+          socket.close();
+        }
+      } catch (e) {
+        print("⚠️ PC Node indisponível para receber transação TCP: $e");
+      }
 
       setState(() {
         transactions.add({
@@ -371,28 +443,36 @@ class _MeshCoinShellState extends State<MeshCoinShell> {
 
   void _onSendMessage(String recipient, String text) {
     String payload = text;
+    String targetAddress = recipient;
+
+    // Resolve username para endereço se aplicável
+    if (recipient.startsWith('@')) {
+      String? resolved = ledger.resolveUsername(recipient);
+      if (resolved != null && resolved.isNotEmpty) {
+        targetAddress = resolved;
+      }
+    }
     
-    // Se não for broadcast, encriptar com a chave PQC do destinatário
     if (recipient != "BROADCAST") {
-      // Como não temos um discovery real de chaves PQC ainda na POC,
-      // usaremos o endereço (PublicKey) como seed simulada para a criptografia LWE.
-      // Em produção, a chave pública PQC (Kyber) do destinatário estaria no Ledger.
-      String dummyPqcKey = base64Encode(utf8.encode(recipient.padRight(128, '0').substring(0, 128)));
+      String dummyPqcKey = base64Encode(utf8.encode(targetAddress.padRight(128, '0').substring(0, 128)));
       payload = NebulaPQC.encryptMessage(text, dummyPqcKey);
     }
     
     Map<String, dynamic> msg = {
       'tipo': 'CHAT',
-      'remetente': _address.length > 12 ? _address.substring(0, 12) : _address,
+      'remetente': _address,
+      'destinatario': recipient,
+      'destinatarioAddress': targetAddress,
       'texto': payload,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
     };
     
-    meshNode.sendRoutedData(recipient, msg);
+    meshNode.sendRoutedData('BROADCAST', msg);
 
     setState(() {
       chatMessages.add({
         ...msg,
-        'texto': text, // Localmente salvamos descriptografado
+        'texto': text,
         'isMine': true,
       });
     });
@@ -402,9 +482,10 @@ class _MeshCoinShellState extends State<MeshCoinShell> {
     switch (_currentIndex) {
       case 0: return '💬 Nebula Chat';
       case 1: return '☁️ Nebula Cloud';
-      case 2: return '🛒 P2P Marketplace';
+      case 2: return '🛒 Marketplace';
       case 3: return '⛏️ Mineração';
-      case 4: return '⚙️ Configurações';
+      case 4: return '💼 Carteira & PoW';
+      case 5: return '⚙️ Configurações';
       default: return 'Nebula';
     }
   }
@@ -438,10 +519,14 @@ class _MeshCoinShellState extends State<MeshCoinShell> {
         decoration: const BoxDecoration(
           gradient: MeshColors.darkGradient,
         ),
-        child: IndexedStack(
-          index: _currentIndex,
-          children: [
-            MessengerScreen(
+        child: SafeArea(
+          bottom: false,
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 80.0), // Espaço para o BottomNav
+            child: IndexedStack(
+              index: _currentIndex,
+              children: [
+                MessengerScreen(
               meshNode: meshNode,
               myAddress: _address,
               messages: chatMessages,
@@ -458,10 +543,24 @@ class _MeshCoinShellState extends State<MeshCoinShell> {
               minerAddress: _address,
               meshNode: meshNode,
             ),
+            WalletScreen(
+              meshNode: meshNode,
+              ledger: ledger,
+              address: _address,
+              publicKey: _publicKey,
+              privateKey: _privateKey,
+              balance: ledger.getBalanceOfAddress(_address),
+              onWalletGenerated: _onWalletGenerated,
+              onSendPayment: _onSendPayment,
+              transactions: transactions,
+            ),
             const SettingsScreen(),
           ],
         ),
-      ),
+          ), // Padding
+        ), // SafeArea
+      ), // Container
+
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: MeshColors.surface,
@@ -485,28 +584,33 @@ class _MeshCoinShellState extends State<MeshCoinShell> {
           unselectedItemColor: MeshColors.textMuted,
           items: const [
             BottomNavigationBarItem(
-              icon: Icon(Icons.forum_outlined),
-              activeIcon: Icon(Icons.forum, size: 28),
+              icon: Icon(Icons.chat_bubble_outline),
+              activeIcon: Icon(Icons.chat_bubble),
               label: 'Chat',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.cloud_queue),
-              activeIcon: Icon(Icons.cloud, size: 28),
+              activeIcon: Icon(Icons.cloud),
               label: 'Cloud',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.storefront_outlined),
-              activeIcon: Icon(Icons.storefront, size: 28),
+              icon: Icon(Icons.shopping_cart_outlined),
+              activeIcon: Icon(Icons.shopping_cart),
               label: 'Mercado',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.memory_outlined),
-              activeIcon: Icon(Icons.memory, size: 28),
+              activeIcon: Icon(Icons.memory),
               label: 'Minerar',
             ),
             BottomNavigationBarItem(
+              icon: Icon(Icons.account_balance_wallet_outlined),
+              activeIcon: Icon(Icons.account_balance_wallet),
+              label: 'Carteira',
+            ),
+            BottomNavigationBarItem(
               icon: Icon(Icons.settings_outlined),
-              activeIcon: Icon(Icons.settings, size: 28),
+              activeIcon: Icon(Icons.settings),
               label: 'Ajustes',
             ),
           ],

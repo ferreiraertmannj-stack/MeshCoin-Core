@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'batman_router.dart';
 import 'network/nearby_service.dart';
 
@@ -43,27 +44,66 @@ class MeshNode {
 
   Future<void> start() async {
     isRunning = true;
+    final prefs = await SharedPreferences.getInstance();
+    bool enableP2p = prefs.getBool('enable_p2p_offline') ?? true;
+    bool enableBridge = prefs.getBool('enable_bridge_online') ?? true;
+
     if (!kIsWeb) {
       await _detectMyIp();
-      // Inicia a camada Nearby (BLE + Wi-Fi Direct) apenas se não for Web
-      await nearbyService.start();
       
-      // Inicia a camada UDP/TCP (Hotspot/LAN)
-      _startUdpListener();
-      _startUdpBroadcaster();
-      _startTcpListener();
-      _startOgmBroadcaster(); // B.A.T.M.A.N OGM
+      if (enableP2p) {
+        // Inicia a camada Nearby (BLE + Wi-Fi Direct) apenas se não for Web
+        await nearbyService.start();
+        
+        // Inicia a camada UDP/TCP (Hotspot/LAN)
+        _startUdpListener();
+        _startUdpBroadcaster();
+        _startTcpListener();
+        _startOgmBroadcaster(); // B.A.T.M.A.N OGM
+      }
     }
     
-    // Inicia a conexão global P2P via WebSocket (suportada na Web também)
-    _startGlobalWebSocket();
+    if (enableBridge) {
+      // Inicia a conexão global P2P via WebSocket (suportada na Web também)
+      _startGlobalWebSocket();
+    }
   }
 
-  void _startGlobalWebSocket() {
+  Timer? _wsPingTimer;
+
+  Future<void> _startGlobalWebSocket() async {
     try {
-      _wsChannel = WebSocketChannel.connect(Uri.parse(globalServerUrl));
+      final prefs = await SharedPreferences.getInstance();
+      String bridgeIp = prefs.getString('pc_node_ip') ?? '127.0.0.1';
+      if (bridgeIp.contains(':')) bridgeIp = bridgeIp.split(':')[0];
+      if (bridgeIp.isEmpty) bridgeIp = '127.0.0.1';
+      
+      final url = "ws://$bridgeIp:8080/ws";
+      print("Conectando ao PC Node / Bridge em: $url");
+      
+      _wsChannel = WebSocketChannel.connect(Uri.parse(url));
+      
+      // Realizar o Handshake Real
+      _wsChannel?.sink.add(jsonEncode({
+        "tipo": "HANDSHAKE",
+        "node": nodeName,
+        "timestamp": DateTime.now().millisecondsSinceEpoch
+      }));
+
+      // Heartbeat a cada 15 segundos para evitar que o SO mate o socket
+      _wsPingTimer?.cancel();
+      _wsPingTimer = Timer.periodic(const Duration(seconds: 15), (timer) {
+        if (_wsChannel != null) {
+          try {
+            _wsChannel?.sink.add(jsonEncode({"tipo": "PING"}));
+          } catch (e) {
+            timer.cancel();
+          }
+        }
+      });
+
       _wsChannel?.stream.listen((message) {
-        // Mensagem recebida da internet (Japão, etc)
+        // Mensagem recebida da internet (Japão, etc) ou PC Node
         try {
           final data = json.decode(message);
           for (var cb in onMessageCallbacks) {
@@ -71,15 +111,18 @@ class MeshNode {
           }
         } catch (e) {}
       }, onError: (err) {
-        print("Erro WS Global: \$err");
+        print("Erro WS Global: $err");
+        _wsPingTimer?.cancel();
       }, onDone: () {
+        print("Conexão WS fechada. Reconectando...");
+        _wsPingTimer?.cancel();
         // Reconectar após um tempo se cair
         if (isRunning) {
-          Future.delayed(Duration(seconds: 5), _startGlobalWebSocket);
+          Future.delayed(const Duration(seconds: 5), _startGlobalWebSocket);
         }
       });
     } catch (e) {
-      print("Não foi possível conectar ao WebSocket Global: \$e");
+      print("Não foi possível conectar ao WebSocket Global: $e");
     }
   }
 
@@ -101,6 +144,10 @@ class MeshNode {
 
   void onMessage(Function(Map<String, dynamic>) callback) {
     onMessageCallbacks.add(callback);
+  }
+
+  void removeMessage(Function(Map<String, dynamic>) callback) {
+    onMessageCallbacks.remove(callback);
   }
 
   Future<void> _startUdpListener() async {
@@ -126,6 +173,16 @@ class MeshNode {
               if (!directPeers.contains(peerId)) {
                 directPeers.add(peerId);
               }
+
+              // Auto-descoberta do PC Node
+              SharedPreferences.getInstance().then((prefs) {
+                String? currentIp = prefs.getString('pc_node_ip');
+                if (currentIp == null || currentIp.isEmpty || currentIp == '127.0.0.1') {
+                  prefs.setString('pc_node_ip', ip);
+                  print("📡 PC Node descoberto via UDP: $ip. Conectando WebSocket e baixando Ledger...");
+                  _startGlobalWebSocket();
+                }
+              });
             }
           }
         }
@@ -293,7 +350,7 @@ class MeshNode {
     
     Socket.connect(ip, tcpPort, timeout: Duration(seconds: 2)).then((socket) {
       socket.add(bytes);
-      socket.destroy();
+      socket.close();
     }).catchError((e) {
       // Peer inalcançável
     });
@@ -337,7 +394,7 @@ class MeshNode {
       
       Socket.connect(ip, port, timeout: Duration(seconds: 2)).then((socket) {
         socket.add(bytes);
-        socket.destroy();
+        socket.close();
       }).catchError((e) {
         toRemove.add(peer);
       });

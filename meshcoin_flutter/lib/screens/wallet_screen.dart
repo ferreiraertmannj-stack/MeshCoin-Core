@@ -2,17 +2,24 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import '../theme/app_theme.dart';
 import '../crypto/wallet_crypto.dart';
 import '../mesh_node.dart';
 import '../blockchain/ledger.dart';
+import '../blockchain/transaction.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'mining_screen.dart';
 
 class WalletScreen extends StatefulWidget {
   final MeshNode meshNode;
   final Ledger ledger;
   final String address;
+  final String publicKey;
+  final String privateKey;
   final double balance;
   final Function(Map<String, String>) onWalletGenerated;
   final Function(String, String) onSendPayment;
@@ -23,6 +30,8 @@ class WalletScreen extends StatefulWidget {
     required this.meshNode,
     required this.ledger,
     required this.address,
+    required this.publicKey,
+    required this.privateKey,
     required this.balance,
     required this.onWalletGenerated,
     required this.onSendPayment,
@@ -239,34 +248,84 @@ class _WalletScreenState extends State<WalletScreen> {
     );
   }
 
-  void _sendPayment() {
-    if (widget.address == 'Não gerada') {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Gere uma carteira primeiro!')),
-      );
+  Future<void> _sendPayment() async {
+    String dest = _destController.text.trim();
+    String valStr = _valorController.text.trim();
+    double amount = double.tryParse(valStr) ?? 0.0;
+
+    if (dest.isEmpty || amount <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Endereço ou valor inválido.', style: TextStyle(color: Colors.white)), backgroundColor: Colors.red));
       return;
     }
-    if (_destController.text.isEmpty || _valorController.text.isEmpty) return;
 
-    widget.onSendPayment(_destController.text, _valorController.text);
-    _destController.clear();
-    _valorController.clear();
+    try {
+      // Create and sign tx
+      Transaction tx = Transaction.create(
+        senderPubKey: widget.publicKey,
+        senderAddress: widget.address,
+        privateKeyHex: widget.privateKey,
+        receiverAddress: dest,
+        amount: amount,
+      );
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.send, color: MeshColors.neonCyan),
-            const SizedBox(width: 8),
-            Text('Transação enviada via Mesh P2P!',
-              style: GoogleFonts.inter(fontWeight: FontWeight.w600)),
-          ],
-        ),
-        backgroundColor: MeshColors.surface,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
+      // Adiciona à Mempool Local do Smartphone para que a mineração possa incluir esta transação no próximo bloco!
+      bool addedLocal = widget.ledger.addTransaction(tx);
+      if (!addedLocal) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Erro: Saldo insuficiente ou transação duplicada localmente.', style: TextStyle(color: Colors.white)), backgroundColor: Colors.red),
+        );
+        return;
+      }
+
+      // Envia para a Rede Mesh P2P
+      widget.meshNode.sendRoutedData('BROADCAST', {
+        'tipo': 'NEW_TRANSACTION',
+        'tx': tx.toJson(),
+      });
+
+      final prefs = await SharedPreferences.getInstance();
+      String bridgeIp = prefs.getString('pc_node_ip') ?? '';
+      if (bridgeIp.contains(':')) bridgeIp = bridgeIp.split(':')[0];
+
+      if (bridgeIp.isNotEmpty && bridgeIp != '127.0.0.1') {
+        Socket socket = await Socket.connect(bridgeIp, 5556, timeout: const Duration(seconds: 5));
+        
+        Map<String, dynamic> tcpPacket = {
+          'tipo': 'NEW_TRANSACTION',
+          'transaction': tx.toJson(),
+        };
+        
+        // CRITICAL: The \n at the end is required by Go's json.NewDecoder
+        socket.write('${json.encode(tcpPacket)}\n');
+        await socket.flush();
+        
+        // Aguarda resposta
+        String responseData = "";
+        try {
+          List<int> data = await socket.first.timeout(const Duration(seconds: 5));
+          responseData = utf8.decode(data);
+        } catch(e) {
+          print("Erro aguardando resposta: $e");
+        }
+        socket.destroy();
+        
+        if (responseData.contains('"error"')) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Erro no PC Node: Saldo insuficiente ou transação rejeitada.', style: TextStyle(color: Colors.white)), backgroundColor: Colors.red));
+          return;
+        }
+        
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Transação adicionada à Mempool! Minere um bloco para confirmar.', style: TextStyle(color: Colors.white)), backgroundColor: Colors.green));
+        _valorController.clear();
+        _destController.clear();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Transação salva na Mempool Local! Configure o IP do PC Node nos Ajustes para sincronizar.', style: TextStyle(color: Colors.white)), backgroundColor: Colors.orange));
+        _valorController.clear();
+        _destController.clear();
+      }
+    } catch (e) {
+      print("Transaction error: $e");
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Falha na rede: $e', style: const TextStyle(color: Colors.white)), backgroundColor: Colors.red));
+    }
   }
 
   @override
@@ -352,7 +411,7 @@ class _WalletScreenState extends State<WalletScreen> {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    '${widget.balance.toStringAsFixed(2)} NBL',
+                    '${widget.ledger.getBalanceOfAddress(widget.address).toStringAsFixed(2)} NBL',
                     style: GoogleFonts.jetBrainsMono(
                       color: MeshColors.neonGreen,
                       fontSize: 13,
@@ -545,7 +604,15 @@ class _WalletScreenState extends State<WalletScreen> {
               prefixIcon: const Icon(Icons.person_outline, color: MeshColors.textMuted, size: 20),
               suffixIcon: IconButton(
                 icon: const Icon(Icons.qr_code_scanner, color: MeshColors.neonCyan, size: 20),
-                onPressed: () {}, // Futuro: scanner de QR
+                onPressed: () async {
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const QRScannerScreen()),
+                  );
+                  if (result != null && result is String) {
+                    _destController.text = result;
+                  }
+                },
               ),
             ),
           ),
@@ -668,6 +735,53 @@ class _WalletScreenState extends State<WalletScreen> {
               );
             }),
         ],
+      ),
+    );
+  }
+}
+
+class QRScannerScreen extends StatefulWidget {
+  const QRScannerScreen({Key? key}) : super(key: key);
+
+  @override
+  State<QRScannerScreen> createState() => _QRScannerScreenState();
+}
+
+class _QRScannerScreenState extends State<QRScannerScreen> {
+  late MobileScannerController controller;
+  bool _isProcessing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    controller = MobileScannerController(detectionSpeed: DetectionSpeed.noDuplicates);
+  }
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(title: const Text('Escanear Endereço NBL')),
+      body: MobileScanner(
+        controller: controller,
+        onDetect: (capture) {
+          if (_isProcessing) return;
+          final List<Barcode> barcodes = capture.barcodes;
+          if (barcodes.isNotEmpty && barcodes.first.rawValue != null) {
+            _isProcessing = true; // Lock to prevent multiple pops
+            final String code = barcodes.first.rawValue!;
+            // Stop camera before closing view to prevent thread lock
+            controller.stop().then((_) {
+              if (mounted) Navigator.pop(context, code);
+            });
+          }
+        },
       ),
     );
   }
