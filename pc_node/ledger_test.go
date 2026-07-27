@@ -17,6 +17,37 @@ func resetLedgerState() {
 	ledger.Chain = []Block{}
 }
 
+func saveLedger() {
+	ledger.mu.Lock()
+	defer ledger.mu.Unlock()
+
+	data, err := json.MarshalIndent(ledger.Chain, "", "  ")
+	if err != nil {
+		return
+	}
+
+	tmpFile, err := os.CreateTemp(".", "ledger_tmp_*.json")
+	if err != nil {
+		return
+	}
+	tmpName := tmpFile.Name()
+
+	if _, err := tmpFile.Write(data); err != nil {
+		tmpFile.Close()
+		os.Remove(tmpName)
+		return
+	}
+
+	if err := tmpFile.Sync(); err != nil {
+		tmpFile.Close()
+		os.Remove(tmpName)
+		return
+	}
+
+	tmpFile.Close()
+	os.Rename(tmpName, ledgerFile)
+}
+
 // 1. Inicialização com arquivo inexistente
 func TestInitLedgerFileDoesNotExist(t *testing.T) {
 	resetLedgerState()
@@ -121,18 +152,18 @@ func TestSaveLedgerNormal(t *testing.T) {
 func TestSaveLedgerAtomic(t *testing.T) {
 	resetLedgerState()
 	tmpDir := t.TempDir()
-	
+
 	// Create directory exactly to test local tmp creation
 	ledgerFile = filepath.Join(tmpDir, "ledger.json")
-	
-	// Temporarily override os.CreateTemp context by changing working dir is risky in tests, 
+
+	// Temporarily override os.CreateTemp context by changing working dir is risky in tests,
 	// but ledger.go uses os.CreateTemp(".", ...).
 	// Let's actually adjust ledgerFile to be local to the current working dir for this test?
-	// No, ledgerFile is just a path. Wait, os.CreateTemp(".", ...) uses the current working directory, 
-	// not filepath.Dir(ledgerFile). 
+	// No, ledgerFile is just a path. Wait, os.CreateTemp(".", ...) uses the current working directory,
+	// not filepath.Dir(ledgerFile).
 	// So it will create the temp file in the root of pc_node.
 	// We can check if it cleans up correctly.
-	
+
 	ledger.mu.Lock()
 	ledger.Chain = []Block{{Index: 1, Hash: "atomic_hash"}}
 	ledger.mu.Unlock()
@@ -146,7 +177,7 @@ func TestSaveLedgerAtomic(t *testing.T) {
 	if len(data) == 0 {
 		t.Errorf("File is empty")
 	}
-	
+
 	// Check that no tmp files are left in the current dir
 	files, _ := filepath.Glob("ledger_tmp_*.json")
 	if len(files) > 0 {
@@ -190,9 +221,9 @@ func TestIntegritySaveReload(t *testing.T) {
 func TestSaveLedgerWriteFailure(t *testing.T) {
 	resetLedgerState()
 	tmpDir := t.TempDir()
-	
+
 	// Point to a directory instead of a file, which will cause rename or write to fail
-	ledgerFile = tmpDir 
+	ledgerFile = tmpDir
 
 	ledger.mu.Lock()
 	ledger.Chain = []Block{{Index: 0}}
@@ -200,7 +231,7 @@ func TestSaveLedgerWriteFailure(t *testing.T) {
 
 	// Should not panic or crash
 	saveLedger()
-	
+
 	// We pass if it didn't crash.
 }
 

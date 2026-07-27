@@ -68,8 +68,7 @@ func main() {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	<-c
 
-	log.Println("\nEncerrando Nebula Full Node. Salvando ledger final...")
-	saveLedger()
+	log.Println("\nEncerrando Nebula Full Node...")
 	log.Println("Adeus.")
 }
 

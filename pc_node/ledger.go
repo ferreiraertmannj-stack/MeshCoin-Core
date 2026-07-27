@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"os"
 	"strings"
 	"sync"
+
+	"pc_node/storage"
+	"pc_node/storage/jsonstorage"
 
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4/ecdsa"
@@ -49,22 +51,30 @@ var (
 	ledger              = Ledger{Chain: []Block{}}
 	PendingTransactions []Transaction
 	mempoolMutex        sync.Mutex
+	DB                  storage.Engine
 )
 
 var ledgerFile = "ledger.json"
 
 // Load or create genesis block
 func initLedger() {
-	file, err := ioutil.ReadFile(ledgerFile)
+	DB = jsonstorage.NewJSONEngine()
+	err := DB.Open(ledgerFile)
 	if err == nil {
-		if jsonErr := json.Unmarshal(file, &ledger.Chain); jsonErr == nil && len(ledger.Chain) > 0 {
-			log.Printf("Ledger Mestre existente carregado com %d blocos.\n", len(ledger.Chain))
-			return
-		} else {
-			log.Fatalf("❌ ERRO FATAL: ledger.json está corrompido! Erro: %v. Abortando para evitar perda de dados.", jsonErr)
+		it := DB.NewBlockIterator()
+		for it.Next() {
+			var b Block
+			if err := json.Unmarshal(it.Value(), &b); err == nil {
+				ledger.Chain = append(ledger.Chain, b)
+			}
 		}
-	} else if os.IsNotExist(err) {
-		log.Println("Criando novo Ledger Mestre com Bloco Gênesis...")
+		if len(ledger.Chain) > 0 {
+			log.Printf("Ledger Mestre existente carregado com %d blocos via Storage Adapter.\n", len(ledger.Chain))
+			return
+		}
+		log.Fatalf("❌ ERRO FATAL: ledger.json está corrompido! Abortando para evitar perda de dados.")
+	} else if err == storage.ErrNotFound {
+		log.Println("Criando novo Ledger Mestre com Bloco Gênesis via Storage Adapter...")
 	} else {
 		log.Fatalf("❌ ERRO FATAL: falha ao ler ledger.json! Erro: %v", err)
 	}
@@ -81,46 +91,13 @@ func initLedger() {
 		Transactions: []Transaction{},
 	}
 	ledger.Chain = []Block{genesis}
-	saveLedger()
-}
 
-func saveLedger() {
-	ledger.mu.Lock()
-	defer ledger.mu.Unlock()
-
-	data, err := json.MarshalIndent(ledger.Chain, "", "  ")
-	if err != nil {
-		log.Println("Erro ao serializar ledger:", err)
-		return
-	}
-
-	tmpFile, err := os.CreateTemp(".", "ledger_tmp_*.json")
-	if err != nil {
-		log.Println("Erro ao criar arquivo temporário:", err)
-		return
-	}
-	tmpName := tmpFile.Name()
-
-	if _, err := tmpFile.Write(data); err != nil {
-		log.Println("Erro ao escrever no arquivo temporário:", err)
-		tmpFile.Close()
-		os.Remove(tmpName)
-		return
-	}
-
-	if err := tmpFile.Sync(); err != nil {
-		log.Println("Erro ao fazer fsync no arquivo temporário:", err)
-		tmpFile.Close()
-		os.Remove(tmpName)
-		return
-	}
-
-	tmpFile.Close()
-
-	if err := os.Rename(tmpName, ledgerFile); err != nil {
-		log.Println("Erro ao renomear arquivo temporário:", err)
-		os.Remove(tmpName)
-		return
+	// Persiste o genesis via adaptador
+	bData, _ := json.Marshal(genesis)
+	batch := DB.NewBatch()
+	batch.PutBlock(0, bData)
+	if err := batch.Commit(); err != nil {
+		log.Fatalf("Erro ao salvar genesis no storage: %v", err)
 	}
 }
 
@@ -255,8 +232,13 @@ func handleNewBlock(block Block) bool {
 		go uploadToNebulaCloud()
 	}
 
-	// Fora do Lock, salva no disco
-	go saveLedger()
+	// Fora do Lock, salva no disco via adapter
+	blockBytes, _ := json.Marshal(block)
+	go func(b []byte, idx uint64) {
+		batch := DB.NewBatch()
+		batch.PutBlock(idx, b)
+		batch.Commit()
+	}(blockBytes, uint64(block.Index))
 	return true
 }
 
