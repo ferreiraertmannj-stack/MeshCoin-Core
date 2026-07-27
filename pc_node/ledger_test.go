@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+
+	"pc_node/storage/jsonstorage"
 )
 
 // Helper for resetting global state
@@ -15,6 +17,7 @@ func resetLedgerState() {
 	ledger.mu.Lock()
 	defer ledger.mu.Unlock()
 	ledger.Chain = []Block{}
+	DB = jsonstorage.NewJSONEngine()
 }
 
 func saveLedger() {

@@ -9,7 +9,6 @@ import (
 	"sync"
 
 	"pc_node/storage"
-	"pc_node/storage/jsonstorage"
 
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4/ecdsa"
@@ -56,13 +55,15 @@ var ledgerFile = "ledger.json"
 
 // Load or create genesis block
 func initLedger() {
-	DB = jsonstorage.NewJSONEngine()
+	if DB == nil {
+		log.Fatalf("❌ ERRO FATAL: Storage Engine não foi inicializado antes do Ledger.")
+	}
 	err := DB.Open(ledgerFile)
 	if err == nil {
 		it := DB.NewBlockIterator()
 		for it.Next() {
 			var b Block
-			if err := jsonstorage.UnmarshalBlock(it.Value(), &b); err == nil {
+			if err := storage.UnmarshalBlock(it.Value(), &b); err == nil {
 				ledger.Chain = append(ledger.Chain, b)
 			}
 		}
@@ -90,8 +91,8 @@ func initLedger() {
 	}
 	ledger.Chain = []Block{genesis}
 
-	// Persiste o genesis via adaptador
-	bData, _ := jsonstorage.MarshalBlock(genesis)
+	// Batch atomic para gravar o genesis via Engine
+	bData, _ := storage.MarshalBlock(genesis)
 	batch := DB.NewBatch()
 	batch.PutBlock(0, bData)
 	if err := batch.Commit(); err != nil {
@@ -231,7 +232,7 @@ func handleNewBlock(block Block) bool {
 	}
 
 	// Fora do Lock, salva no disco via adapter
-	blockBytes, _ := jsonstorage.MarshalBlock(block)
+	blockBytes, _ := storage.MarshalBlock(block)
 	go func(b []byte, idx uint64) {
 		batch := DB.NewBatch()
 		batch.PutBlock(idx, b)
