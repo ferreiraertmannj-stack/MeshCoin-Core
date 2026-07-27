@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"os"
 	"strings"
 	"sync"
 	
@@ -54,18 +55,18 @@ const ledgerFile = "ledger.json"
 
 // Load or create genesis block
 func initLedger() {
-	var file []byte
-	var err error
-
-	if file, err = ioutil.ReadFile(ledgerFile); err == nil {
+	file, err := ioutil.ReadFile(ledgerFile)
+	if err == nil {
 		if jsonErr := json.Unmarshal(file, &ledger.Chain); jsonErr == nil && len(ledger.Chain) > 0 {
 			log.Printf("Ledger Mestre existente carregado com %d blocos.\n", len(ledger.Chain))
 			return
 		} else {
-			log.Println("⚠️ ledger.json corrompido ou vazio. Recriando Bloco Gênesis...")
+			log.Fatalf("❌ ERRO FATAL: ledger.json está corrompido! Erro: %v. Abortando para evitar perda de dados.", jsonErr)
 		}
-	} else {
+	} else if os.IsNotExist(err) {
 		log.Println("Criando novo Ledger Mestre com Bloco Gênesis...")
+	} else {
+		log.Fatalf("❌ ERRO FATAL: falha ao ler ledger.json! Erro: %v", err)
 	}
 
 	genesis := Block{
@@ -92,7 +93,35 @@ func saveLedger() {
 		log.Println("Erro ao serializar ledger:", err)
 		return
 	}
-	ioutil.WriteFile(ledgerFile, data, 0644)
+	
+	tmpFile, err := os.CreateTemp("", "ledger_tmp_*.json")
+	if err != nil {
+		log.Println("Erro ao criar arquivo temporário:", err)
+		return
+	}
+	tmpName := tmpFile.Name()
+	
+	if _, err := tmpFile.Write(data); err != nil {
+		log.Println("Erro ao escrever no arquivo temporário:", err)
+		tmpFile.Close()
+		os.Remove(tmpName)
+		return
+	}
+	
+	if err := tmpFile.Sync(); err != nil {
+		log.Println("Erro ao fazer fsync no arquivo temporário:", err)
+		tmpFile.Close()
+		os.Remove(tmpName)
+		return
+	}
+	
+	tmpFile.Close()
+	
+	if err := os.Rename(tmpName, ledgerFile); err != nil {
+		log.Println("Erro ao renomear arquivo temporário:", err)
+		os.Remove(tmpName)
+		return
+	}
 }
 
 func calculateHash(b Block) string {
