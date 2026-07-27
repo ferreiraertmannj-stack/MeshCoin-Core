@@ -51,7 +51,7 @@ var (
 	mempoolMutex        sync.Mutex
 )
 
-const ledgerFile = "ledger.json"
+var ledgerFile = "ledger.json"
 
 // Load or create genesis block
 func initLedger() {
