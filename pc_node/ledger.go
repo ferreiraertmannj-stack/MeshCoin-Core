@@ -10,7 +10,7 @@ import (
 	"os"
 	"strings"
 	"sync"
-	
+
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4/ecdsa"
 )
@@ -24,8 +24,8 @@ type Transaction struct {
 	Amount          float64 `json:"amount"`
 	Fee             float64 `json:"fee"`
 	Timestamp       int64   `json:"timestamp"`
-	Signature       string  `json:"signature"`      // Assinatura ECDSA
-	PQCSignature    string  `json:"pqcSignature"`   // [Futuro] Assinatura Pós-Quântica (Dilithium)
+	Signature       string  `json:"signature"`    // Assinatura ECDSA
+	PQCSignature    string  `json:"pqcSignature"` // [Futuro] Assinatura Pós-Quântica (Dilithium)
 }
 
 type Block struct {
@@ -36,7 +36,7 @@ type Block struct {
 	Nonce        int           `json:"nonce"`
 	Hash         string        `json:"hash"`
 	MinerStorage int           `json:"minerStorage"` // Nebula Cloud Storage Pledge
-	StorageType  string        `json:"storageType"`    // "SSD" ou "HDD"
+	StorageType  string        `json:"storageType"`  // "SSD" ou "HDD"
 	Transactions []Transaction `json:"transactions"`
 }
 
@@ -46,9 +46,9 @@ type Ledger struct {
 }
 
 var (
-	ledger = Ledger{Chain: []Block{}}
+	ledger              = Ledger{Chain: []Block{}}
 	PendingTransactions []Transaction
-	mempoolMutex sync.Mutex
+	mempoolMutex        sync.Mutex
 )
 
 const ledgerFile = "ledger.json"
@@ -93,30 +93,30 @@ func saveLedger() {
 		log.Println("Erro ao serializar ledger:", err)
 		return
 	}
-	
-	tmpFile, err := os.CreateTemp("", "ledger_tmp_*.json")
+
+	tmpFile, err := os.CreateTemp(".", "ledger_tmp_*.json")
 	if err != nil {
 		log.Println("Erro ao criar arquivo temporário:", err)
 		return
 	}
 	tmpName := tmpFile.Name()
-	
+
 	if _, err := tmpFile.Write(data); err != nil {
 		log.Println("Erro ao escrever no arquivo temporário:", err)
 		tmpFile.Close()
 		os.Remove(tmpName)
 		return
 	}
-	
+
 	if err := tmpFile.Sync(); err != nil {
 		log.Println("Erro ao fazer fsync no arquivo temporário:", err)
 		tmpFile.Close()
 		os.Remove(tmpName)
 		return
 	}
-	
+
 	tmpFile.Close()
-	
+
 	if err := os.Rename(tmpName, ledgerFile); err != nil {
 		log.Println("Erro ao renomear arquivo temporário:", err)
 		os.Remove(tmpName)
@@ -131,7 +131,7 @@ func calculateHash(b Block) string {
 	} else {
 		record = fmt.Sprintf("%d%d%s%s%d", b.Index, b.Timestamp, b.PreviousHash, b.MerkleRoot, b.Nonce)
 	}
-	
+
 	// NeonHash v1.0 (Vector Math / Memory Hard Simulation)
 	h := sha256.New()
 	h.Write([]byte(record))
