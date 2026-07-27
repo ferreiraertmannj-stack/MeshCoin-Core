@@ -186,27 +186,26 @@ func VerifyNeonHash(block Block) bool {
 }
 
 func handleNewBlock(block Block) bool {
-	ledger.mu.Lock()
-	defer ledger.mu.Unlock()
-
+	// Pega o último bloco para validação estrutural
+	ledger.mu.RLock()
 	if len(ledger.Chain) == 0 {
+		ledger.mu.RUnlock()
 		return false
 	}
-
 	lastBlock := ledger.Chain[len(ledger.Chain)-1]
+	ledger.mu.RUnlock()
 
-	// Verifica se já temos o bloco
+	// Validação estrutural fora do Write Lock
 	if block.Index <= lastBlock.Index {
 		return false
 	}
 
-	// Valida se o bloco bate com nossa chain
 	if block.PreviousHash != lastBlock.Hash {
 		log.Printf("❌ Bloco %d rejeitado: PreviousHash inválido\n", block.Index)
 		return false
 	}
 
-	// Verifica o Hash do bloco recebido usando a validação NeonHash
+	// Validação pesada (PoW) fora do Write Lock
 	if !VerifyNeonHash(block) {
 		log.Printf("❌ Bloco %d rejeitado: PoW NeonHash Inválido\n", block.Index)
 		return false
@@ -222,10 +221,21 @@ func handleNewBlock(block Block) bool {
 		}
 	}
 
+	// Adquire o Write Lock apenas para a alteração de estado
+	ledger.mu.Lock()
+
+	// Double-check: garante que a chain não andou enquanto validávamos
+	if len(ledger.Chain) == 0 || block.Index <= ledger.Chain[len(ledger.Chain)-1].Index {
+		ledger.mu.Unlock()
+		return false
+	}
+
 	ledger.Chain = append(ledger.Chain, block)
+	ledger.mu.Unlock()
+
 	log.Printf("✅ Bloco #%d validado e adicionado ao Ledger Mestre!\n", block.Index)
 
-	// Remove as transações mineradas da Mempool Global (PendingTransactions)
+	// Remove as transações mineradas da Mempool Global
 	mempoolMutex.Lock()
 	minedTxIDs := make(map[string]bool)
 	for _, tx := range block.Transactions {

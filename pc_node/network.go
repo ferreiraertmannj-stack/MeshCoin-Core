@@ -6,8 +6,8 @@ import (
 	"log"
 	"net"
 	"strings"
-	"time"
 	"sync"
+	"time"
 )
 
 const (
@@ -73,7 +73,7 @@ func broadcastPresence() {
 	defer conn.Close()
 
 	msg := []byte(fmt.Sprintf("%s:%d", magic, tcpPort))
-	
+
 	// Envia o ping a cada 5 segundos
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
@@ -131,7 +131,9 @@ func handleConnection(conn net.Conn) {
 		}
 
 		tipo, ok := packet["tipo"].(string)
-		if !ok { continue }
+		if !ok {
+			continue
+		}
 
 		switch tipo {
 		case "NEW_BLOCK":
@@ -156,20 +158,26 @@ func broadcastTCP(packet map[string]interface{}, sender net.Conn) {
 	if err != nil {
 		return
 	}
-	
+
 	// Envia para os clientes WebSocket também!
 	broadcast <- data
-	
-	tcpMutex.Lock()
-	defer tcpMutex.Unlock()
 
+	tcpMutex.Lock()
+	clientsCopy := make([]net.Conn, 0, len(activeTCPClients))
 	for client := range activeTCPClients {
 		if client != sender {
-			_, err := client.Write(data)
-			if err != nil {
-				client.Close()
-				delete(activeTCPClients, client)
-			}
+			clientsCopy = append(clientsCopy, client)
+		}
+	}
+	tcpMutex.Unlock()
+
+	for _, client := range clientsCopy {
+		_, err := client.Write(data)
+		if err != nil {
+			client.Close()
+			tcpMutex.Lock()
+			delete(activeTCPClients, client)
+			tcpMutex.Unlock()
 		}
 	}
 }
@@ -178,7 +186,9 @@ func handleNewBlockPacket(packet map[string]interface{}, conn net.Conn) {
 	blockData, ok := packet["block"]
 	if !ok {
 		log.Println("❌ Falha na validação: pacote NEW_BLOCK não contém a chave 'block'")
-		if conn != nil { conn.Write([]byte(`{"status": "error", "message": "Missing block data"}`)) }
+		if conn != nil {
+			conn.Write([]byte(`{"status": "error", "message": "Missing block data"}`))
+		}
 		return
 	}
 
@@ -186,17 +196,23 @@ func handleNewBlockPacket(packet map[string]interface{}, conn net.Conn) {
 	var block Block
 	if err := json.Unmarshal(bytesData, &block); err != nil {
 		log.Println("❌ Erro ao converter bloco do JSON:", err)
-		if conn != nil { conn.Write([]byte(`{"status": "error", "message": "Invalid JSON format"}`)) }
+		if conn != nil {
+			conn.Write([]byte(`{"status": "error", "message": "Invalid JSON format"}`))
+		}
 		return
 	}
 
 	success := handleNewBlock(block)
 	if success {
 		log.Println("✅ NEW_BLOCK processado com sucesso via TCP/WS.")
-		if conn != nil { conn.Write([]byte(`{"status": "success", "message": "Block appended to ledger"}`)) }
+		if conn != nil {
+			conn.Write([]byte(`{"status": "success", "message": "Block appended to ledger"}`))
+		}
 	} else {
 		log.Println("❌ Bloco rejeitado pelo Ledger Mestre.")
-		if conn != nil { conn.Write([]byte(`{"status": "error", "message": "Block rejected by validation"}`)) }
+		if conn != nil {
+			conn.Write([]byte(`{"status": "error", "message": "Block rejected by validation"}`))
+		}
 	}
 }
 

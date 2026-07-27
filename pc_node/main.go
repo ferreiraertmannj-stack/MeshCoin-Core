@@ -1,16 +1,17 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"github.com/gorilla/websocket"
 	"log"
 	"net"
-	"strings"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
+	"sync"
 	"syscall"
-	"encoding/json"
-	"github.com/gorilla/websocket"
 )
 
 func displayLocalIPs() {
@@ -44,11 +45,11 @@ func main() {
 
 	// Inicializa o Ledger (Lê do disco ou cria Genesis)
 	initLedger()
-	
+
 	// Aloca o armazenamento Nebula Cloud e detecta Hardware
 	storageType := DetectStorageType()
 	log.Printf("Hardware Detectado: %s\n", storageType)
-	
+
 	// Exemplo: 100 GB Total (50GB Ledger / 50GB Cloud)
 	log.Println("Política de Armazenamento: 100GB Alocados (50% Ledger / 50% Nebula Cloud)")
 	err := AllocateNebulaCloudStorage(50)
@@ -73,6 +74,7 @@ func main() {
 }
 
 var clients = make(map[*websocket.Conn]bool)
+var wsMutex sync.Mutex
 var broadcast = make(chan []byte)
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool { return true },
@@ -84,7 +86,7 @@ func startSidecarAPI() {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(getLedgerJSON())
 	})
-	
+
 	http.HandleFunc("/api/status", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Content-Type", "application/json")
@@ -111,17 +113,21 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	defer ws.Close()
 
+	wsMutex.Lock()
 	clients[ws] = true
+	wsMutex.Unlock()
 	log.Println("Novo cliente WebSocket conectado!")
 
 	for {
 		_, msg, err := ws.ReadMessage()
 		if err != nil {
 			log.Println("Erro de leitura WS, desconectando cliente:", err)
+			wsMutex.Lock()
 			delete(clients, ws)
+			wsMutex.Unlock()
 			break
 		}
-		
+
 		// Converte a mensagem para verificar se é um Bloco
 		var packet map[string]interface{}
 		if err := json.Unmarshal(msg, &packet); err == nil {
@@ -151,12 +157,22 @@ func handleWebSocket(w http.ResponseWriter, r *http.Request) {
 func handleMessages() {
 	for {
 		msg := <-broadcast
+
+		wsMutex.Lock()
+		clientsCopy := make([]*websocket.Conn, 0, len(clients))
 		for client := range clients {
+			clientsCopy = append(clientsCopy, client)
+		}
+		wsMutex.Unlock()
+
+		for _, client := range clientsCopy {
 			err := client.WriteMessage(websocket.TextMessage, msg)
 			if err != nil {
 				log.Println("Erro ao enviar via WS:", err)
 				client.Close()
+				wsMutex.Lock()
 				delete(clients, client)
+				wsMutex.Unlock()
 			}
 		}
 	}
