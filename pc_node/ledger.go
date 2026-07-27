@@ -3,9 +3,7 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"strings"
 	"sync"
@@ -64,7 +62,7 @@ func initLedger() {
 		it := DB.NewBlockIterator()
 		for it.Next() {
 			var b Block
-			if err := json.Unmarshal(it.Value(), &b); err == nil {
+			if err := jsonstorage.UnmarshalBlock(it.Value(), &b); err == nil {
 				ledger.Chain = append(ledger.Chain, b)
 			}
 		}
@@ -93,7 +91,7 @@ func initLedger() {
 	ledger.Chain = []Block{genesis}
 
 	// Persiste o genesis via adaptador
-	bData, _ := json.Marshal(genesis)
+	bData, _ := jsonstorage.MarshalBlock(genesis)
 	batch := DB.NewBatch()
 	batch.PutBlock(0, bData)
 	if err := batch.Commit(); err != nil {
@@ -233,26 +231,13 @@ func handleNewBlock(block Block) bool {
 	}
 
 	// Fora do Lock, salva no disco via adapter
-	blockBytes, _ := json.Marshal(block)
+	blockBytes, _ := jsonstorage.MarshalBlock(block)
 	go func(b []byte, idx uint64) {
 		batch := DB.NewBatch()
 		batch.PutBlock(idx, b)
 		batch.Commit()
 	}(blockBytes, uint64(block.Index))
 	return true
-}
-
-func getLedgerJSON() []byte {
-	// Força a leitura direta do arquivo em disco
-	data, err := ioutil.ReadFile(ledgerFile)
-	if err != nil {
-		// Fallback para memória se o arquivo não estiver disponível por algum motivo
-		ledger.mu.RLock()
-		defer ledger.mu.RUnlock()
-		mData, _ := json.Marshal(ledger.Chain)
-		return mData
-	}
-	return data
 }
 
 func formatDartDouble(v float64) string {

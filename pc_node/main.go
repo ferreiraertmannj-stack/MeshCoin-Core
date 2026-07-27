@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"github.com/gorilla/websocket"
@@ -175,4 +176,21 @@ func handleMessages() {
 			}
 		}
 	}
+}
+
+func getLedgerJSON() []byte {
+	var buf bytes.Buffer
+	buf.WriteString("[\n")
+	it := DB.NewBlockIterator()
+	defer it.Close()
+	first := true
+	for it.Next() {
+		if !first {
+			buf.WriteString(",\n")
+		}
+		buf.Write(it.Value())
+		first = false
+	}
+	buf.WriteString("\n]")
+	return buf.Bytes()
 }

@@ -26,7 +26,7 @@ func saveLedger() {
 		return
 	}
 
-	tmpFile, err := os.CreateTemp(".", "ledger_tmp_*.json")
+	tmpFile, err := os.CreateTemp(filepath.Dir(ledgerFile), "ledger_tmp_*.json")
 	if err != nil {
 		return
 	}
@@ -178,8 +178,8 @@ func TestSaveLedgerAtomic(t *testing.T) {
 		t.Errorf("File is empty")
 	}
 
-	// Check that no tmp files are left in the current dir
-	files, _ := filepath.Glob("ledger_tmp_*.json")
+	// Check that no tmp files are left in the tmp dir
+	files, _ := filepath.Glob(filepath.Join(tmpDir, "ledger_tmp_*.json"))
 	if len(files) > 0 {
 		t.Errorf("Temp files were not cleaned up: %v", files)
 		for _, f := range files {
