@@ -29,7 +29,7 @@ type MsgTransaction struct {
 	Data []byte `json:"data"` // Raw tx data
 }
 
-type MsgInventory struct {
+type MsgGossipInventory struct {
 	Items []string `json:"items"` // List of hashes
 }
 
