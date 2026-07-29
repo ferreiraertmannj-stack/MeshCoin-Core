@@ -47,13 +47,19 @@ func main() {
 	// Inicializa o Ledger (Lê do disco ou cria Genesis)
 	initLedger()
 
+	// Intercepta e executa o Fast Sync se houver nós na rede com ledger mais atualizado
+	err := RunFastSyncBootstrap(uint64(len(ledger.Chain)))
+	if err != nil {
+		log.Fatalf("❌ Falha crítica no Fast Sync: %v", err)
+	}
+
 	// Aloca o armazenamento Nebula Cloud e detecta Hardware
 	storageType := DetectStorageType()
 	log.Printf("Hardware Detectado: %s\n", storageType)
 
 	// Exemplo: 100 GB Total (50GB Ledger / 50GB Cloud)
 	log.Println("Política de Armazenamento: 100GB Alocados (50% Ledger / 50% Nebula Cloud)")
-	err := AllocateNebulaCloudStorage(50)
+	err = AllocateNebulaCloudStorage(50)
 	if err != nil {
 		log.Println("Aviso na alocação Nebula Cloud:", err)
 	}
