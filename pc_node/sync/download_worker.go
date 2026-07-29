@@ -88,7 +88,7 @@ func (w *DownloadWorker) processChunk(ctx context.Context, chunk DownloadChunk) 
 		} else {
 			// Success! In this sprint, we just mock the payload in memory.
 			w.queue.MarkCompleted(chunk)
-			
+
 			w.results <- DownloadedChunk{
 				StartHeight:  chunk.StartHeight,
 				EndHeight:    chunk.EndHeight,

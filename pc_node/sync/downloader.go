@@ -8,18 +8,18 @@ import (
 
 // Downloader orchestrates multiple DownloadWorkers and a DownloadQueue.
 type Downloader struct {
-	mu           sync.RWMutex
-	queue        *DownloadQueue
-	peerPool     PeerPool
-	workers      []*DownloadWorker
-	cancelFunc   context.CancelFunc
-	results      chan DownloadedChunk
-	
-	concurrency  int
-	timeout      time.Duration
-	isActive     bool
-	isPaused     bool
-	
+	mu         sync.RWMutex
+	queue      *DownloadQueue
+	peerPool   PeerPool
+	workers    []*DownloadWorker
+	cancelFunc context.CancelFunc
+	results    chan DownloadedChunk
+
+	concurrency int
+	timeout     time.Duration
+	isActive    bool
+	isPaused    bool
+
 	downloadedChunks []DownloadedChunk
 }
 
@@ -54,7 +54,7 @@ func (d *Downloader) Start() {
 		d.workers[i] = worker
 		go worker.Start(ctx)
 	}
-	
+
 	// Collect results async
 	go func() {
 		for {
@@ -104,15 +104,15 @@ func (d *Downloader) Resume() {
 	if !d.isActive || !d.isPaused {
 		return
 	}
-	
+
 	ctx, cancel := context.WithCancel(context.Background())
 	d.cancelFunc = cancel
 	d.isPaused = false
-	
+
 	for i := 0; i < d.concurrency; i++ {
 		go d.workers[i].Start(ctx)
 	}
-	
+
 	go func() {
 		for {
 			select {

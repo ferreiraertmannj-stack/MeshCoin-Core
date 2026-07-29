@@ -20,8 +20,8 @@ func TestSyncManager_StateTransitions(t *testing.T) {
 	pool := &mockPeerPool{}
 	sm := NewSyncManager(pool)
 
-	if sm.Status().State != StateIdle {
-		t.Errorf("Expected Idle state initially, got %v", sm.Status().State)
+	if sm.Status().CurrentState != StateIdle {
+		t.Errorf("Expected Idle state initially, got %v", sm.Status().CurrentState)
 	}
 
 	err := sm.StartSync(1000)
@@ -29,14 +29,14 @@ func TestSyncManager_StateTransitions(t *testing.T) {
 		t.Fatalf("Failed to start sync: %v", err)
 	}
 
-	if sm.Status().State != StateDiscoveringPeers {
-		t.Errorf("Expected DiscoveringPeers state, got %v", sm.Status().State)
+	if sm.Status().CurrentState != StateDiscoveringPeers {
+		t.Fatalf("Expected StateDiscoveringPeers, got %v", sm.Status().CurrentState)
 	}
 
 	sm.UpdateLocalHeight(500)
 	status := sm.Status()
-	if status.ProgressPct != 50.0 {
-		t.Errorf("Expected 50%% progress, got %f", status.ProgressPct)
+	if status.ProgressPercent != 50.0 {
+		t.Errorf("Expected 50%% progress, got %f", status.ProgressPercent)
 	}
 
 	time.Sleep(10 * time.Millisecond)
@@ -56,7 +56,7 @@ func TestSyncManager_StateTransitions(t *testing.T) {
 	}
 
 	sm.SetState(StateCompleted)
-	if sm.Status().State != StateCompleted {
+	if sm.Status().CurrentState != StateCompleted {
 		t.Errorf("Expected Completed state")
 	}
 
@@ -64,7 +64,7 @@ func TestSyncManager_StateTransitions(t *testing.T) {
 		t.Errorf("Failed to cancel: %v", err)
 	}
 
-	if sm.Status().State != StateIdle {
-		t.Errorf("Expected Idle after cancel, got %v", sm.Status().State)
+	if sm.Status().CurrentState != StateIdle {
+		t.Errorf("Expected Idle after cancel, got %v", sm.Status().CurrentState)
 	}
 }

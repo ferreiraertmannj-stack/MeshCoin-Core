@@ -14,7 +14,7 @@ func TestSyncController_StateTransitions(t *testing.T) {
 	manager := NewSyncManager(pool)
 	queue := NewDownloadQueue(3)
 	downloader := NewDownloader(queue, pool, 2, 50*time.Millisecond)
-	
+
 	stateChanges := []SyncState{}
 	var stateMu sync.Mutex
 
@@ -58,17 +58,17 @@ func TestSyncController_CancelAndPause(t *testing.T) {
 	manager := NewSyncManager(pool)
 	queue := NewDownloadQueue(3)
 	downloader := NewDownloader(queue, pool, 2, 50*time.Millisecond)
-	
+
 	cancelled := false
 	events := SyncControllerEventHandlers{
 		OnCancelled: func() { cancelled = true },
 	}
 
 	controller := NewSyncController(manager, downloader, events)
-	
+
 	controller.Start(5000)
 	time.Sleep(10 * time.Millisecond)
-	
+
 	controller.Pause()
 	status := controller.Status()
 	if status.CurrentState == StateCompleted {
@@ -76,10 +76,10 @@ func TestSyncController_CancelAndPause(t *testing.T) {
 	}
 
 	controller.Resume()
-	
+
 	controller.Cancel()
 	time.Sleep(10 * time.Millisecond)
-	
+
 	if !cancelled {
 		t.Fatalf("OnCancelled event not fired")
 	}
@@ -96,16 +96,16 @@ func TestSyncController_ConcurrencyStress(t *testing.T) {
 	manager := NewSyncManager(pool)
 	queue := NewDownloadQueue(3)
 	downloader := NewDownloader(queue, pool, 10, 50*time.Millisecond)
-	
+
 	controller := NewSyncController(manager, downloader, SyncControllerEventHandlers{})
 	controller.Start(10000)
-	
+
 	var wg sync.WaitGroup
 	for i := 0; i < 300; i++ {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			
+
 			// Mix actions
 			action := idx % 5
 			switch action {

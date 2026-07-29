@@ -35,7 +35,7 @@ func NewDownloadQueue(maxRetries int) *DownloadQueue {
 func (q *DownloadQueue) AddRange(start, end, chunkSize uint64) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	
+
 	if start > end {
 		return
 	}
@@ -57,11 +57,11 @@ func (q *DownloadQueue) AddRange(start, end, chunkSize uint64) {
 func (q *DownloadQueue) NextChunk() (*DownloadChunk, bool) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	
+
 	if len(q.pendingChunks) == 0 {
 		return nil, false
 	}
-	
+
 	chunk := q.pendingChunks[0]
 	q.pendingChunks = q.pendingChunks[1:]
 	return &chunk, true
@@ -74,12 +74,12 @@ func (q *DownloadQueue) MarkCompleted(chunk DownloadChunk) {
 	q.completedChunks = append(q.completedChunks, chunk)
 }
 
-// MarkFailed increments the retry counter. If it exceeds maxRetries, 
+// MarkFailed increments the retry counter. If it exceeds maxRetries,
 // the chunk is permanently failed. Otherwise, it is requeued.
 func (q *DownloadQueue) MarkFailed(chunk DownloadChunk) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	
+
 	chunk.Retries++
 	if chunk.Retries >= q.maxRetries {
 		q.failedChunks = append(q.failedChunks, chunk)

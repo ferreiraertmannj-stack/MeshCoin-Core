@@ -109,13 +109,13 @@ func (sm *SyncManager) Status() SyncStatusReport {
 	}
 
 	return SyncStatusReport{
-		CurrentState:     sm.state,
-		CurrentHeight:    sm.localHeight,
-		RemoteHeight:     sm.remoteHeight,
-		ProgressPercent:  pct,
-		ETASeconds:       eta,
-		SpeedBlocksSec:   speed,
-		UpdatedAt:        time.Now(),
+		CurrentState:    sm.state,
+		CurrentHeight:   sm.localHeight,
+		RemoteHeight:    sm.remoteHeight,
+		ProgressPercent: pct,
+		ETASeconds:      eta,
+		SpeedBlocksSec:  speed,
+		UpdatedAt:       time.Now(),
 	}
 }
 

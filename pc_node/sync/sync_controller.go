@@ -2,6 +2,7 @@ package sync
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 )
@@ -18,13 +19,13 @@ type SyncControllerEventHandlers struct {
 // SyncController binds the SyncManager (State) to the Downloader (Action)
 // and handles the full Fast Sync state machine lifecycle.
 type SyncController struct {
-	mu           sync.RWMutex
-	manager      *SyncManager
-	downloader   *Downloader
-	events       SyncControllerEventHandlers
-	
-	cancelFunc   context.CancelFunc
-	isActive     bool
+	mu         sync.RWMutex
+	manager    *SyncManager
+	downloader *Downloader
+	events     SyncControllerEventHandlers
+
+	cancelFunc context.CancelFunc
+	isActive   bool
 }
 
 // NewSyncController initializes the main coordinator for Fast Sync.
@@ -93,7 +94,7 @@ func (c *SyncController) Cancel() error {
 	c.Stop()
 	err := c.manager.Cancel()
 	c.downloader.Stop()
-	
+
 	if c.events.OnCancelled != nil {
 		c.events.OnCancelled()
 	}
@@ -103,7 +104,7 @@ func (c *SyncController) Cancel() error {
 // Status proxies and aggregates reports from Manager and Downloader.
 func (c *SyncController) Status() SyncStatusReport {
 	report := c.manager.Status()
-	
+
 	completed, pending, failed := c.downloader.Progress()
 	report.DownloadedChunks = completed
 	report.PendingChunks = pending
@@ -111,10 +112,10 @@ func (c *SyncController) Status() SyncStatusReport {
 	report.Workers = c.downloader.ActiveWorkers()
 	// PeerPool is inside Manager
 	report.Peers = c.manager.peerPool.PeerCount()
-	
+
 	// Assuming blocks downloaded = chunks * chunk size approx
 	// In the future this will be precise. For now we use the manager's blocksSynced.
-	
+
 	return report
 }
 
@@ -161,7 +162,7 @@ func (c *SyncController) runStateMachine(ctx context.Context, targetHeight uint6
 	if c.events.OnDownloadStarted != nil {
 		c.events.OnDownloadStarted()
 	}
-	
+
 	c.downloader.Start()
 
 	// Wait for downloader to finish
@@ -173,10 +174,10 @@ func (c *SyncController) runStateMachine(ctx context.Context, targetHeight uint6
 		case <-time.After(100 * time.Millisecond):
 			// Check if downloader is still active and chunks are done
 			comp, pend, fail := c.downloader.Progress()
-			
+
 			// Emulate height progress based on chunks
 			c.manager.UpdateLocalHeight(c.manager.localHeight + uint64(comp*int(chunkSize)))
-			
+
 			if fail > 0 {
 				c.downloader.Stop()
 				c.fail(errors.New("chunk download failed permanently"))
@@ -205,7 +206,7 @@ verify:
 		return
 	case <-time.After(50 * time.Millisecond):
 	}
-	
+
 	// Simulate checking continuity (omitted hash/crypto logic as per RFC)
 	// 5. Completed
 	c.manager.UpdateLocalHeight(targetHeight)

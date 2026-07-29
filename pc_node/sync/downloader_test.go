@@ -1,7 +1,6 @@
 package sync
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -42,9 +41,13 @@ func TestDownloadQueue_Basic(t *testing.T) {
 	}
 
 	c2, _ := q.NextChunk()
+	_, _ = q.NextChunk()
+
 	q.MarkFailed(*c2)
-	q.MarkFailed(*c2)
-	q.MarkFailed(*c2) // Should exceed retries (3)
+	c2_r1, _ := q.NextChunk()
+	q.MarkFailed(*c2_r1)
+	c2_r2, _ := q.NextChunk()
+	q.MarkFailed(*c2_r2) // Should exceed retries (3)
 
 	if q.FailedChunks() != 1 {
 		t.Fatalf("Expected 1 failed chunk after 3 retries")
@@ -65,7 +68,7 @@ func TestDownloader_Lifecycle(t *testing.T) {
 	queue.AddRange(1, 10, 2) // 5 chunks
 
 	downloader := NewDownloader(queue, pool, 2, 50*time.Millisecond)
-	
+
 	downloader.Start()
 	if downloader.Status() != "Running" || downloader.ActiveWorkers() != 2 {
 		t.Fatalf("Failed to start properly")
@@ -112,8 +115,8 @@ func TestDownloader_Integration_Parallel(t *testing.T) {
 	downloader.Stop()
 
 	completed, pending, failed := downloader.Progress()
-	
-	// Because p1 is reliable and fastest, the retry mechanism should eventually 
+
+	// Because p1 is reliable and fastest, the retry mechanism should eventually
 	// route failed chunks (from p2 and p3) to p1.
 	if completed != 5 {
 		t.Fatalf("Expected all 5 chunks to complete eventually via retries, got %d. pending=%d failed=%d", completed, pending, failed)
@@ -123,7 +126,7 @@ func TestDownloader_Integration_Parallel(t *testing.T) {
 func TestDownloader_ConcurrencyStress(t *testing.T) {
 	pool := NewPeerPool()
 	queue := NewDownloadQueue(5)
-	
+
 	// Huge range = 500 chunks
 	queue.AddRange(1, 50000, 100)
 
@@ -167,23 +170,23 @@ func TestDownloader_ConcurrencyStress(t *testing.T) {
 	// Let the storm resolve
 	wg.Wait()
 	time.Sleep(100 * time.Millisecond)
-	
+
 	downloader.Pause()
 	downloader.Resume()
 	time.Sleep(50 * time.Millisecond)
-	
+
 	downloader.Stop()
-	
+
 	completed, pending, failed := downloader.Progress()
 	total := completed + pending + failed
 	// The queue might not be fully exhausted due to time limit, but it must not crash or race
 	if total != 500 && pending > 0 { // Sum might exceed due to retries if not tracked carefully? No, chunks are moved.
 		// Retries re-add to pending, but total unique is 500.
-		// Wait, len(pending) + len(failed) + len(completed) should always be >= 500 
+		// Wait, len(pending) + len(failed) + len(completed) should always be >= 500
 		// Actually exactly 500 since a chunk is either pending, completed, or failed (removed from pending when processed).
 		// Wait, while processing, it's out of the queue!
 		// So total = 500 - in_flight_chunks.
 	}
-	
+
 	// Just passing without panics or races is the primary goal for this stress test.
 }
