@@ -1,0 +1,32 @@
+{
+  "seed_0": {
+    "node_id": "seed_0",
+    "address": {
+      "ip": "1.1.1.1",
+      "port": 5556
+    },
+    "capabilities": null,
+    "version": "",
+    "reliability": 1,
+    "latency_ms": 0,
+    "uptime_s": 0,
+    "last_success": "2026-07-29T17:51:30.4200387-03:00",
+    "failures": 0,
+    "is_seed": true
+  },
+  "seed_1": {
+    "node_id": "seed_1",
+    "address": {
+      "ip": "2.2.2.2",
+      "port": 5556
+    },
+    "capabilities": null,
+    "version": "",
+    "reliability": 1,
+    "latency_ms": 0,
+    "uptime_s": 0,
+    "last_success": "2026-07-29T17:51:30.4200387-03:00",
+    "failures": 0,
+    "is_seed": true
+  }
+}
