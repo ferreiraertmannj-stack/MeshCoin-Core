@@ -227,6 +227,13 @@ func TestHeartbeat_And_Timeout(t *testing.T) {
 	}()
 	wg.Wait()
 
+	router1 := NewMessageRouter(nil, nil, RouterEvents{})
+	router2 := NewMessageRouter(nil, nil, RouterEvents{})
+	router1.Start()
+	router2.Start()
+	go MessageLoop(p1, router1)
+	go MessageLoop(p2, router2)
+
 	// Wait for heartbeats
 	time.Sleep(150 * time.Millisecond)
 

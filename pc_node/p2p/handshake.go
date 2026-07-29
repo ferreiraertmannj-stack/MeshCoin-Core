@@ -71,9 +71,8 @@ func (p *Peer) DoHandshake(opts HandshakeValidationOptions) error {
 		p.events.OnPeerAuthenticated(p.info)
 	}
 
-	// Start Heartbeat and Message Loop
+	// Start Heartbeat
 	go p.heartbeatLoop()
-	go p.messageLoop()
 
 	return nil
 }
@@ -152,7 +151,6 @@ func (p *Peer) DoClientHandshake(opts HandshakeValidationOptions) error {
 	}
 
 	go p.heartbeatLoop()
-	go p.messageLoop()
 
 	return nil
 }
