@@ -1,5 +1,7 @@
 package sync
 
+import "time"
+
 // Peer defines the contract for interacting with remote nodes during Fast Sync.
 // This interface allows future expansion to support multiple peers concurrently.
 type Peer interface {
@@ -8,14 +10,24 @@ type Peer interface {
 	RequestHeaders(startHash string, limit int) error
 	RequestBlocks(startIndex, endIndex uint64) error
 	Disconnect()
+
+	// Metrics for PeerPool scoring
+	Height() uint64
+	Latency() time.Duration
+	Failures() int
+	ConnectedSince() time.Time
 }
 
-// PeerPool manages available peers for sync, supporting selection and load balancing.
+// PeerPool gerencia os peers para sincronização com Thread Safety e algoritmos de Score.
 type PeerPool interface {
-	GetBestPeer() Peer
-	GetAllPeers() []Peer
 	AddPeer(p Peer)
 	RemovePeer(id string)
+	PeerCount() int
+	ListPeers() []Peer
+	BestPeer() Peer
+	RandomPeer() Peer
+	FastestPeer() Peer
+	HighestPeer() Peer
 }
 
 // BlockValidator defines the contract for validating blocks before importing them.

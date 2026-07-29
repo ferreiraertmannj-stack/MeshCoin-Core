@@ -7,10 +7,14 @@ import (
 
 type mockPeerPool struct{}
 
-func (m *mockPeerPool) GetBestPeer() Peer    { return nil }
-func (m *mockPeerPool) GetAllPeers() []Peer  { return nil }
 func (m *mockPeerPool) AddPeer(p Peer)       {}
 func (m *mockPeerPool) RemovePeer(id string) {}
+func (m *mockPeerPool) PeerCount() int       { return 0 }
+func (m *mockPeerPool) ListPeers() []Peer    { return nil }
+func (m *mockPeerPool) BestPeer() Peer       { return nil }
+func (m *mockPeerPool) RandomPeer() Peer     { return nil }
+func (m *mockPeerPool) FastestPeer() Peer    { return nil }
+func (m *mockPeerPool) HighestPeer() Peer    { return nil }
 
 func TestSyncManager_StateTransitions(t *testing.T) {
 	pool := &mockPeerPool{}
@@ -35,7 +39,6 @@ func TestSyncManager_StateTransitions(t *testing.T) {
 		t.Errorf("Expected 50%% progress, got %f", status.ProgressPct)
 	}
 
-	// Sleep slightly to simulate time passing for speed calculation
 	time.Sleep(10 * time.Millisecond)
 	sm.UpdateLocalHeight(600)
 
