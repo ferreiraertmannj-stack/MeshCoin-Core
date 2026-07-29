@@ -77,13 +77,13 @@ func benchmarkWriteNBlocks(b *testing.B, engineType string, n int) {
 		b.StopTimer()
 		engine, _, cleanup := setupEngine(b, engineType)
 		b.StartTimer()
-		
+
 		for j := 0; j < n; j++ {
 			batch := engine.NewBatch()
 			batch.PutBlock(uint64(j), blockData)
 			batch.Commit()
 		}
-		
+
 		b.StopTimer()
 		cleanup()
 		b.StartTimer()
@@ -118,7 +118,7 @@ func BenchmarkGetLatestBlock(b *testing.B) {
 			engine, _, cleanup := setupEngine(b, e)
 			defer cleanup()
 			populateEngine(b, engine, 10)
-			
+
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				_, _ = engine.GetLatestBlock()
@@ -134,7 +134,7 @@ func BenchmarkGetBlockByIndex(b *testing.B) {
 			engine, _, cleanup := setupEngine(b, e)
 			defer cleanup()
 			populateEngine(b, engine, 100)
-			
+
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				_, _ = engine.GetBlockByIndex(uint64(i % 100))
@@ -150,7 +150,7 @@ func BenchmarkIterateChain(b *testing.B) {
 			engine, _, cleanup := setupEngine(b, e)
 			defer cleanup()
 			populateEngine(b, engine, 100)
-			
+
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				it := engine.NewBlockIterator()
@@ -170,7 +170,7 @@ func BenchmarkGetBalance(b *testing.B) {
 			engine, _, cleanup := setupEngine(b, e)
 			defer cleanup()
 			populateEngine(b, engine, 10)
-			
+
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				_, _ = engine.GetBalance("ADDR_5")
@@ -185,7 +185,7 @@ func BenchmarkBatchCommit(b *testing.B) {
 		b.Run(e, func(b *testing.B) {
 			engine, _, cleanup := setupEngine(b, e)
 			defer cleanup()
-			
+
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				batch := engine.NewBatch()
@@ -205,9 +205,9 @@ func BenchmarkOpen(b *testing.B) {
 				engine, connStr, cleanup := setupEngine(b, e)
 				engine.Close() // Fecha o que foi aberto no setup
 				b.StartTimer()
-				
+
 				_ = engine.Open(connStr)
-				
+
 				b.StopTimer()
 				cleanup()
 				b.StartTimer()
@@ -224,7 +224,7 @@ func BenchmarkClose(b *testing.B) {
 				b.StopTimer()
 				engine, _, _ := setupEngine(b, e)
 				b.StartTimer()
-				
+
 				_ = engine.Close()
 			}
 		})
@@ -237,7 +237,7 @@ func BenchmarkReopen(b *testing.B) {
 		b.Run(e, func(b *testing.B) {
 			engine, connStr, cleanup := setupEngine(b, e)
 			defer cleanup()
-			
+
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				engine.Close()
@@ -254,7 +254,7 @@ func BenchmarkConcurrentRead(b *testing.B) {
 			engine, _, cleanup := setupEngine(b, e)
 			defer cleanup()
 			populateEngine(b, engine, 100)
-			
+
 			b.ResetTimer()
 			var wg sync.WaitGroup
 			for i := 0; i < b.N; i++ {
@@ -276,7 +276,7 @@ func BenchmarkConcurrentWrite(b *testing.B) {
 		b.Run(e, func(b *testing.B) {
 			engine, _, cleanup := setupEngine(b, e)
 			defer cleanup()
-			
+
 			b.ResetTimer()
 			var wg sync.WaitGroup
 			for i := 0; i < b.N; i++ {
