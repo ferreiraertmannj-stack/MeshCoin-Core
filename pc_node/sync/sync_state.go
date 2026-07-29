@@ -1,5 +1,7 @@
 package sync
 
+import "time"
+
 // SyncState represents the various phases of the Fast Sync state machine.
 type SyncState string
 
@@ -16,10 +18,18 @@ const (
 
 // SyncStatusReport encapsulates the current progress of the fast sync operation.
 type SyncStatusReport struct {
-	State          SyncState
-	LocalHeight    uint64
-	RemoteHeight   uint64
-	ProgressPct    float64
-	ETASeconds     float64
-	SpeedBlocksSec float64
+	CurrentState     SyncState
+	CurrentHeight    uint64
+	RemoteHeight     uint64
+	DownloadedBlocks uint64
+	DownloadedChunks int
+	PendingChunks    int
+	FailedChunks     int
+	Workers          int
+	Peers            int
+	SpeedBlocksSec   float64
+	ETASeconds       float64
+	ProgressPercent  float64
+	LastError        string
+	UpdatedAt        time.Time
 }
