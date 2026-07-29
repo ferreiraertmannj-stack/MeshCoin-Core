@@ -11,15 +11,26 @@ import (
 )
 
 type Transaction struct {
+	ID              string  `json:"id"`
+	SenderPubKey    string  `json:"senderPubKey"`
 	SenderAddress   string  `json:"senderAddress"`
 	ReceiverAddress string  `json:"receiverAddress"`
 	Amount          float64 `json:"amount"`
 	Fee             float64 `json:"fee"`
+	Timestamp       int64   `json:"timestamp"`
+	Signature       string  `json:"signature"`
+	PQCSignature    string  `json:"pqcSignature"`
 }
 
 type Block struct {
 	Index        uint64        `json:"index"`
+	Timestamp    int64         `json:"timestamp"`
+	PreviousHash string        `json:"previousHash"`
+	MerkleRoot   string        `json:"merkleRoot"`
+	Nonce        int           `json:"nonce"`
 	Hash         string        `json:"hash"`
+	MinerStorage int           `json:"minerStorage"`
+	StorageType  string        `json:"storageType"`
 	Transactions []Transaction `json:"transactions"`
 }
 
