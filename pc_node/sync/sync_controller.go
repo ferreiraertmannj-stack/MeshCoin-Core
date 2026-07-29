@@ -188,8 +188,36 @@ func (c *SyncController) runStateMachine(ctx context.Context, targetHeight uint6
 	}
 	c.changeState(StateRequestingHeaders)
 
+	peer := c.manager.peerPool.BestPeer()
+	if peer == nil {
+		c.fail(errors.New("no peers available for headers"))
+		return
+	}
+
+	err := peer.RequestHeaders(c.manager.localHeight+1, int(targetHeight-c.manager.localHeight))
+	if err != nil {
+		c.fail(err)
+		return
+	}
+
+	msg, err := peer.Receive()
+	if err != nil || msg.Type != MsgTypeHeaders {
+		c.fail(errors.New("failed to receive headers"))
+		return
+	}
+
+	var headersMsg HeadersMsg
+	if err := msg.UnmarshalPayload(&headersMsg); err != nil {
+		c.fail(err)
+		return
+	}
+
+	// Montar DownloadQueue com base na quantidade real reportada/recebida
 	chunkSize := uint64(100)
 	c.downloader.queue.Reset()
+
+	// Apenas como simplificação para a fase, adicionamos range matemático até o targetHeight.
+	// O real seria iterar sobre headersMsg.Headers.
 	c.downloader.queue.AddRange(c.manager.localHeight+1, targetHeight, chunkSize)
 
 	c.changeState(StateDownloadingBlocks)

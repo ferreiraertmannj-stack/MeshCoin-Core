@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"encoding/json"
 	"fmt"
 	"sync"
 	"testing"
@@ -10,16 +11,67 @@ import (
 // mockFastTCPPeer overloads TCPPeer for test speed and timeout manipulation
 type mockFastTCPPeer struct {
 	*TCPPeer
-	sleepTime time.Duration
-	forceFail bool
+	sleepTime   time.Duration
+	forceFail   bool
+	lastRequest MsgType
+	mu          sync.Mutex
 }
 
 func (m *mockFastTCPPeer) RequestBlocks(start, end uint64) error {
 	if m.forceFail {
 		return fmt.Errorf("forced network failure")
 	}
+	m.mu.Lock()
+	m.lastRequest = MsgTypeRequestBlocks
+	m.mu.Unlock()
 	time.Sleep(m.sleepTime)
 	return nil
+}
+
+func (m *mockFastTCPPeer) RequestHeaders(startHeight uint64, limit int) error {
+	if m.forceFail {
+		return fmt.Errorf("forced network failure")
+	}
+	m.mu.Lock()
+	m.lastRequest = MsgTypeRequestHeaders
+	m.mu.Unlock()
+	time.Sleep(m.sleepTime)
+	return nil
+}
+
+func (m *mockFastTCPPeer) GetStatus() error {
+	if m.forceFail {
+		return fmt.Errorf("forced network failure")
+	}
+	m.mu.Lock()
+	m.lastRequest = MsgTypeGetStatus
+	m.mu.Unlock()
+	return nil
+}
+
+func (m *mockFastTCPPeer) Receive() (*TransportMessage, error) {
+	if m.forceFail {
+		return nil, fmt.Errorf("forced network failure")
+	}
+
+	m.mu.Lock()
+	req := m.lastRequest
+	m.mu.Unlock()
+
+	msg := &TransportMessage{}
+	switch req {
+	case MsgTypeRequestHeaders:
+		msg.Type = MsgTypeHeaders
+		msg.Payload, _ = json.Marshal(HeadersMsg{Headers: make([]HeaderMetadata, 100)})
+	case MsgTypeGetStatus:
+		msg.Type = MsgTypeStatus
+		msg.Payload, _ = json.Marshal(SyncStatusMsg{Height: 100})
+	default: // RequestBlocks or unknown
+		msg.Type = MsgTypeBlocks
+		msg.Payload, _ = json.Marshal(BlocksMsg{})
+	}
+
+	return msg, nil
 }
 
 func TestDownloadQueue_Basic(t *testing.T) {

@@ -6,9 +6,10 @@ import "time"
 // This interface allows future expansion to support multiple peers concurrently.
 type Peer interface {
 	ID() string
-	SendMsg(msg interface{}) error
-	RequestHeaders(startHash string, limit int) error
+	SendMsg(msgType MsgType, msg interface{}) error
+	RequestHeaders(startHeight uint64, limit int) error
 	RequestBlocks(startIndex, endIndex uint64) error
+	Receive() (*TransportMessage, error)
 	Disconnect()
 
 	// Metrics for PeerPool scoring

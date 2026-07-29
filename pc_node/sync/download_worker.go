@@ -2,6 +2,7 @@ package sync
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
@@ -65,11 +66,38 @@ func (w *DownloadWorker) processChunk(ctx context.Context, chunk DownloadChunk) 
 	}
 
 	start := time.Now()
-	errCh := make(chan error, 1)
-
 	// Fire network request asynchronously to respect the timeout
+	type result struct {
+		err    error
+		blocks [][]byte
+	}
+	resCh := make(chan result, 1)
+
 	go func() {
-		errCh <- peer.RequestBlocks(chunk.StartHeight, chunk.EndHeight)
+		err := peer.RequestBlocks(chunk.StartHeight, chunk.EndHeight)
+		if err != nil {
+			resCh <- result{err: err}
+			return
+		}
+
+		msg, err := peer.Receive()
+		if err != nil {
+			resCh <- result{err: err}
+			return
+		}
+
+		if msg.Type != MsgTypeBlocks {
+			resCh <- result{err: errors.New("unexpected message type received")}
+			return
+		}
+
+		var blocksMsg BlocksMsg
+		if err := msg.UnmarshalPayload(&blocksMsg); err != nil {
+			resCh <- result{err: err}
+			return
+		}
+
+		resCh <- result{blocks: blocksMsg.Blocks}
 	}()
 
 	select {
@@ -77,22 +105,18 @@ func (w *DownloadWorker) processChunk(ctx context.Context, chunk DownloadChunk) 
 		w.queue.MarkFailed(chunk)
 		return
 	case <-time.After(w.timeout):
-		// Timeout reached
-		peer.AddFailure() // Penalize the peer in the scoring algorithm
+		peer.AddFailure()
 		w.queue.MarkFailed(chunk)
-	case err := <-errCh:
-		if err != nil {
-			// Network error or rejection
+	case res := <-resCh:
+		if res.err != nil {
 			peer.AddFailure()
 			w.queue.MarkFailed(chunk)
 		} else {
-			// Success! In this sprint, we just mock the payload in memory.
 			w.queue.MarkCompleted(chunk)
-
 			w.results <- DownloadedChunk{
 				StartHeight:  chunk.StartHeight,
 				EndHeight:    chunk.EndHeight,
-				Blocks:       make([][]byte, 0), // Kept empty for the mock phase
+				Blocks:       res.blocks,
 				PeerID:       peer.ID(),
 				DownloadTime: time.Since(start),
 			}

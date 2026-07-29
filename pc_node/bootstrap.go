@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"time"
 
 	"pc_node/storage/jsonstorage"
@@ -104,16 +105,40 @@ func RunFastSyncBootstrap(localHeight uint64) error {
 }
 
 // discoverPeers descobre e conecta a peers.
-// Para a Fase 33 (desacoplada da rede real TCPPeer), injetamos peers simulados ou ignoramos se for ambiente real.
 func discoverPeers(pool sync.PeerPool) {
-	// TODO: Integrar com P2P real.
-	// Por padrão, não vamos adicionar peers falsos aqui para não quebrar a execução real do usuário.
-	// Nos testes, injetaremos os peers simulados diretamente no pool.
+	// Em um nó real, nós leríamos os IPs de seed nodes ou de um cache local.
+	// Como estamos rodando na mesma máquina localmente para testes, vamos tentar conectar no localhost.
+	// Se tivermos seed nodes, iteraríamos por eles.
+	seedNodes := []string{"127.0.0.1:5556"}
+
+	for _, addr := range seedNodes {
+		conn, err := net.DialTimeout("tcp", addr, 2*time.Second)
+		if err == nil {
+			peer := sync.NewTCPPeer(addr, conn, 0)
+			pool.AddPeer(peer)
+		}
+	}
 }
 
 func getHighestKnownHeight(pool sync.PeerPool) uint64 {
 	var max uint64 = 0
 	for _, p := range pool.ListPeers() {
+		// Obtém a altura real requisitando o status
+		tcpPeer, ok := p.(*sync.TCPPeer)
+		if ok {
+			err := tcpPeer.GetStatus()
+			if err == nil {
+				// Aguarda a resposta de status
+				msg, err := tcpPeer.Receive()
+				if err == nil && msg.Type == sync.MsgTypeStatus {
+					var statusMsg sync.SyncStatusMsg
+					if err := msg.UnmarshalPayload(&statusMsg); err == nil {
+						tcpPeer.UpdateHeight(statusMsg.Height)
+					}
+				}
+			}
+		}
+
 		if p.Height() > max {
 			max = p.Height()
 		}

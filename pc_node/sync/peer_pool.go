@@ -59,19 +59,34 @@ func (p *DefaultPeerPool) ListPeers() []Peer {
 // BestPeer executa o Algoritmo de Seleção para encontrar o Peer mais apto.
 // Score = (height * 4) - latency (ms) - (failures * 100) + connectionTimeBonus (s)
 func (p *DefaultPeerPool) BestPeer() Peer {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
+	p.mu.Lock()
+	defer p.mu.Unlock()
 
 	var best Peer
 	var maxScore float64 = -999999999.0 // score inicial baixo
 
-	for _, peer := range p.peers {
+	toRemove := []string{}
+
+	for id, peer := range p.peers {
+		if peer.Failures() > 3 { // Threshold para considerar indisponível
+			toRemove = append(toRemove, id)
+			continue
+		}
+
 		score := calculateScore(peer)
 		if best == nil || score > maxScore {
 			maxScore = score
 			best = peer
 		}
 	}
+
+	for _, id := range toRemove {
+		if peer, ok := p.peers[id]; ok {
+			peer.Disconnect()
+			delete(p.peers, id)
+		}
+	}
+
 	return best
 }
 

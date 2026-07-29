@@ -68,19 +68,19 @@ func TestPeerPool_BasicOperations(t *testing.T) {
 	}
 
 	list := pool.ListPeers()
-	if len(list) != 2 {
-		t.Fatalf("ListPeers should return 2 peers")
+	if len(list) != 1 {
+		t.Fatalf("ListPeers should return 1 peer because p2 was evicted")
 	}
 
 	pool.RemovePeer("peer1")
-	if pool.PeerCount() != 1 {
-		t.Fatalf("Expected 1 peer after removal")
+	if pool.PeerCount() != 0 {
+		t.Fatalf("Expected 0 peers after removal, got %d", pool.PeerCount())
 	}
 
 	// Peer inexistente
 	pool.RemovePeer("peer_inexistente")
-	if pool.PeerCount() != 1 {
-		t.Fatalf("Expected count to remain 1 after fake removal")
+	if pool.PeerCount() != 0 {
+		t.Fatalf("Expected count to remain 0 after fake removal, got %d", pool.PeerCount())
 	}
 }
 

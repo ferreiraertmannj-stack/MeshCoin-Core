@@ -3,6 +3,7 @@ package sync
 import (
 	"errors"
 	"net"
+	"sync"
 	"time"
 )
 
@@ -15,10 +16,22 @@ type TCPPeer struct {
 	latency        time.Duration
 	failures       int
 	connectedSince time.Time
+
+	enc *TransportEncoder
+	dec *TransportDecoder
+	mu  sync.Mutex // Protege writes concorrentes no socket
 }
 
 // NewTCPPeer creates a new instance of TCPPeer.
 func NewTCPPeer(id string, conn net.Conn, initialHeight uint64) *TCPPeer {
+	var enc *TransportEncoder
+	var dec *TransportDecoder
+
+	if conn != nil {
+		enc = NewTransportEncoder(conn)
+		dec = NewTransportDecoder(conn)
+	}
+
 	return &TCPPeer{
 		id:             id,
 		conn:           conn,
@@ -26,6 +39,8 @@ func NewTCPPeer(id string, conn net.Conn, initialHeight uint64) *TCPPeer {
 		latency:        time.Millisecond * 50, // default placeholder
 		failures:       0,
 		connectedSince: time.Now(),
+		enc:            enc,
+		dec:            dec,
 	}
 }
 
@@ -50,38 +65,65 @@ func (p *TCPPeer) ConnectedSince() time.Time {
 }
 
 // SendMsg writes any P2P message directly into the physical connection.
-// Na Sprint atual, age como stub/abstração, pois não devemos integrar protocolos.
-func (p *TCPPeer) SendMsg(msg interface{}) error {
-	if p.conn == nil {
+func (p *TCPPeer) SendMsg(msgType MsgType, msg interface{}) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.conn == nil || p.enc == nil {
 		return errors.New("connection is nil")
 	}
-	// TODO: Na Fase de integração real, serializar JSON/Gob e escrever no socket.
-	return nil
+
+	// Read/Write timeout: 5s para controle de lentidão
+	p.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+
+	err := p.enc.Encode(msgType, msg)
+	if err != nil {
+		p.failures++
+	}
+	return err
 }
 
-// Receive is a stub for reading from the conn.
-func (p *TCPPeer) Receive() (interface{}, error) {
-	if p.conn == nil {
+// Receive blocks and reads the next message from the connection.
+func (p *TCPPeer) Receive() (*TransportMessage, error) {
+	if p.conn == nil || p.dec == nil {
 		return nil, errors.New("connection is nil")
 	}
-	return nil, nil
+
+	// Limite de tempo de leitura
+	p.conn.SetReadDeadline(time.Now().Add(10 * time.Second))
+
+	msg, err := p.dec.Decode()
+	if err != nil {
+		p.failures++
+	}
+	return msg, err
 }
 
 // RequestHeaders uses SendMsg to ask for a block skeleton.
-func (p *TCPPeer) RequestHeaders(startHash string, limit int) error {
-	msg := MsgGetHeaders{StartHash: startHash, Limit: limit}
-	return p.SendMsg(msg)
+func (p *TCPPeer) RequestHeaders(startHeight uint64, limit int) error {
+	msg := GetHeadersMsg{StartHeight: startHeight, Limit: limit}
+	return p.SendMsg(MsgTypeRequestHeaders, msg)
 }
 
 // RequestBlocks requests binary payloads.
 func (p *TCPPeer) RequestBlocks(startIndex, endIndex uint64) error {
-	msg := MsgGetBlocks{StartIndex: startIndex, EndIndex: endIndex}
-	return p.SendMsg(msg)
+	msg := GetBlocksMsg{StartHeight: startIndex, EndHeight: endIndex}
+	return p.SendMsg(MsgTypeRequestBlocks, msg)
 }
 
 func (p *TCPPeer) Ping() error {
-	// Atualizaria a latência e verificaria se o socket está vivo.
+	start := time.Now()
+	msg := PingMsg{Timestamp: start}
+	err := p.SendMsg(MsgTypePing, msg)
+	if err != nil {
+		return err
+	}
+	// Em um cenário assíncrono, a latência seria calculada no Pong.
 	return nil
+}
+
+func (p *TCPPeer) GetStatus() error {
+	return p.SendMsg(MsgTypeGetStatus, nil)
 }
 
 func (p *TCPPeer) Disconnect() {
