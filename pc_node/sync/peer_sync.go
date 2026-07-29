@@ -15,6 +15,7 @@ type Peer interface {
 	Height() uint64
 	Latency() time.Duration
 	Failures() int
+	AddFailure()
 	ConnectedSince() time.Time
 }
 
