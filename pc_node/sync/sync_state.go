@@ -18,18 +18,29 @@ const (
 
 // SyncStatusReport encapsulates the current progress of the fast sync operation.
 type SyncStatusReport struct {
-	CurrentState     SyncState
-	CurrentHeight    uint64
-	RemoteHeight     uint64
+	CurrentState  SyncState
+	CurrentHeight uint64
+	RemoteHeight  uint64
+
 	DownloadedBlocks uint64
+	ValidatedBlocks  uint64
+	ImportedBlocks   uint64
+	RejectedBlocks   uint64
+	BytesDownloaded  uint64
+	BytesImported    uint64
+
 	DownloadedChunks int
+	ChunksProcessed  int
 	PendingChunks    int
 	FailedChunks     int
 	Workers          int
 	Peers            int
-	SpeedBlocksSec   float64
-	ETASeconds       float64
-	ProgressPercent  float64
-	LastError        string
-	UpdatedAt        time.Time
+
+	SpeedBlocksSec  float64
+	ETASeconds      float64
+	ProgressPercent float64
+	ElapsedTime     time.Duration
+
+	LastError string
+	UpdatedAt time.Time
 }

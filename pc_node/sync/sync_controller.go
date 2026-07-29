@@ -14,25 +14,43 @@ type SyncControllerEventHandlers struct {
 	OnDownloadCompleted func()
 	OnFailed            func(err error)
 	OnCancelled         func()
+
+	// Pipeline events
+	OnChunkDownloaded func(chunk DownloadedChunk)
+	OnChunkValidated  func(chunk DownloadedChunk)
+	OnChunkImported   func(chunk DownloadedChunk)
+	OnValidationError func(err error, chunk DownloadedChunk)
+	OnProgress        func(report SyncStatusReport)
+	OnPipelineError   func(err error)
+	OnCompleted       func(report SyncStatusReport)
 }
 
-// SyncController binds the SyncManager (State) to the Downloader (Action)
-// and handles the full Fast Sync state machine lifecycle.
+// SyncController binds the SyncManager, Downloader, Validator, and Importer.
 type SyncController struct {
 	mu         sync.RWMutex
 	manager    *SyncManager
 	downloader *Downloader
+	validator  *StandardBlockValidator
+	importer   *BlockImporter
 	events     SyncControllerEventHandlers
 
 	cancelFunc context.CancelFunc
 	isActive   bool
 }
 
-// NewSyncController initializes the main coordinator for Fast Sync.
-func NewSyncController(manager *SyncManager, downloader *Downloader, events SyncControllerEventHandlers) *SyncController {
+// NewSyncController initializes the main coordinator for Fast Sync pipeline.
+func NewSyncController(
+	manager *SyncManager,
+	downloader *Downloader,
+	validator *StandardBlockValidator,
+	importer *BlockImporter,
+	events SyncControllerEventHandlers,
+) *SyncController {
 	return &SyncController{
 		manager:    manager,
 		downloader: downloader,
+		validator:  validator,
+		importer:   importer,
 		events:     events,
 	}
 }
@@ -61,7 +79,7 @@ func (c *SyncController) Start(targetHeight uint64) error {
 	return nil
 }
 
-// Pause pauses both the State Manager and the Downloader immediately.
+// Pause pauses the pipeline.
 func (c *SyncController) Pause() error {
 	err := c.manager.Pause()
 	if err == nil {
@@ -70,7 +88,7 @@ func (c *SyncController) Pause() error {
 	return err
 }
 
-// Resume restarts both State Manager and Downloader.
+// Resume restarts the pipeline.
 func (c *SyncController) Resume() error {
 	err := c.manager.Resume()
 	if err == nil {
@@ -79,7 +97,7 @@ func (c *SyncController) Resume() error {
 	return err
 }
 
-// Stop cleanly aborts the sync without emitting a failure (acting like Cancel).
+// Stop cleanly aborts the sync without emitting a failure.
 func (c *SyncController) Stop() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -101,20 +119,42 @@ func (c *SyncController) Cancel() error {
 	return err
 }
 
-// Status proxies and aggregates reports from Manager and Downloader.
+// Status aggregates reports from Manager, Downloader, Validator, and Importer.
 func (c *SyncController) Status() SyncStatusReport {
 	report := c.manager.Status()
 
-	completed, pending, failed := c.downloader.Progress()
-	report.DownloadedChunks = completed
-	report.PendingChunks = pending
-	report.FailedChunks = failed
+	comp, pend, fail := c.downloader.Progress()
+	report.DownloadedChunks = comp
+	report.PendingChunks = pend
+	report.FailedChunks = fail
 	report.Workers = c.downloader.ActiveWorkers()
-	// PeerPool is inside Manager
 	report.Peers = c.manager.peerPool.PeerCount()
 
-	// Assuming blocks downloaded = chunks * chunk size approx
-	// In the future this will be precise. For now we use the manager's blocksSynced.
+	// Validator Stats
+	vStats := c.validator.Statistics()
+	report.ValidatedBlocks = vStats.BlocksValidated
+	report.RejectedBlocks = vStats.BlocksRejected
+	report.BytesDownloaded = vStats.BytesValidated // As proxy
+
+	// Importer Stats
+	iStats := c.importer.Statistics()
+	report.ImportedBlocks = iStats.ImportedBlocks
+	report.BytesImported = iStats.ImportedBytes
+	report.ChunksProcessed = int(iStats.ImportedChunks)
+
+	// Combine to overall progress
+	report.DownloadedBlocks = report.ImportedBlocks // Using imported as finalized
+
+	if report.RemoteHeight > 0 {
+		report.ProgressPercent = (float64(report.ImportedBlocks) / float64(report.RemoteHeight)) * 100
+	}
+
+	report.SpeedBlocksSec = iStats.ImportSpeed
+	report.ElapsedTime = iStats.ElapsedTime
+
+	if report.SpeedBlocksSec > 0 && report.RemoteHeight > report.CurrentHeight {
+		report.ETASeconds = float64(report.RemoteHeight-report.CurrentHeight) / report.SpeedBlocksSec
+	}
 
 	return report
 }
@@ -135,29 +175,23 @@ func (c *SyncController) runStateMachine(ctx context.Context, targetHeight uint6
 		c.mu.Unlock()
 	}()
 
-	// 1. DiscoveringPeers (Mocked logic, assumes peers already in pool)
 	c.changeState(StateDiscoveringPeers)
 	if c.manager.peerPool.PeerCount() == 0 {
 		c.fail(errors.New("no peers available"))
 		return
 	}
 
-	// 2. RequestingHeaders (Simulated)
 	select {
 	case <-ctx.Done():
 		return
-	case <-time.After(50 * time.Millisecond):
+	case <-time.After(10 * time.Millisecond):
 	}
 	c.changeState(StateRequestingHeaders)
 
-	// Simulate receiving headers and queuing chunks
-	// E.g., targetHeight = 100, chunk size = 10 => 10 chunks
-	// Actually we should queue based on target height
 	chunkSize := uint64(100)
 	c.downloader.queue.Reset()
 	c.downloader.queue.AddRange(c.manager.localHeight+1, targetHeight, chunkSize)
 
-	// 3. DownloadingBlocks
 	c.changeState(StateDownloadingBlocks)
 	if c.events.OnDownloadStarted != nil {
 		c.events.OnDownloadStarted()
@@ -165,52 +199,94 @@ func (c *SyncController) runStateMachine(ctx context.Context, targetHeight uint6
 
 	c.downloader.Start()
 
-	// Wait for downloader to finish
+	// Pipeline loop
+	ticker := time.NewTicker(5 * time.Millisecond)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
 			c.downloader.Stop()
 			return
-		case <-time.After(100 * time.Millisecond):
-			// Check if downloader is still active and chunks are done
+		case <-ticker.C:
+			// Process downloaded chunks
+			for {
+				chunk, ok := c.downloader.PopDownloadedChunk()
+				if !ok {
+					break // No more chunks right now
+				}
+
+				if c.events.OnChunkDownloaded != nil {
+					c.events.OnChunkDownloaded(*chunk)
+				}
+
+				c.changeState(StateVerifyingBlocks)
+				if err := c.validator.ValidateChunk(*chunk); err != nil {
+					// Disparar OnValidationError, não abortar o pipeline, descartar chunk
+					if c.events.OnValidationError != nil {
+						c.events.OnValidationError(err, *chunk)
+					}
+					continue
+				}
+
+				if c.events.OnChunkValidated != nil {
+					c.events.OnChunkValidated(*chunk)
+				}
+
+				c.changeState(StateImportingBlocks)
+				if err := c.importer.ImportChunk(*chunk); err != nil {
+					c.fail(err)
+					c.downloader.Stop()
+					return
+				}
+
+				if c.events.OnChunkImported != nil {
+					c.events.OnChunkImported(*chunk)
+				}
+
+				c.manager.UpdateLocalHeight(chunk.EndHeight)
+				if c.events.OnProgress != nil {
+					c.events.OnProgress(c.Status())
+				}
+			}
+
+			// Check completion or downloader failure
 			comp, pend, fail := c.downloader.Progress()
-
-			// Emulate height progress based on chunks
-			c.manager.UpdateLocalHeight(c.manager.localHeight + uint64(comp*int(chunkSize)))
-
 			if fail > 0 {
+				err := errors.New("pipeline error: chunks permanently failed download")
+				if c.events.OnPipelineError != nil {
+					c.events.OnPipelineError(err)
+				}
 				c.downloader.Stop()
-				c.fail(errors.New("chunk download failed permanently"))
+				c.fail(err)
 				return
 			}
+
+			// Finished
 			if pend == 0 && comp > 0 {
+				// All chunks downloaded and processed?
+				// Progress() shows what downloader thinks is completed.
+				// Since we popped all downloaded chunks, if queue is done, we are done.
 				c.downloader.Stop()
-				goto verify
+				c.changeState(StateCompleted)
+				if c.events.OnDownloadCompleted != nil {
+					c.events.OnDownloadCompleted()
+				}
+				if c.events.OnCompleted != nil {
+					c.events.OnCompleted(c.Status())
+				}
+				return
 			}
 			if pend == 0 && comp == 0 {
 				c.downloader.Stop()
-				goto verify
+				c.changeState(StateCompleted)
+				if c.events.OnCompleted != nil {
+					c.events.OnCompleted(c.Status())
+				}
+				return
 			}
 		}
 	}
-
-verify:
-	if c.events.OnDownloadCompleted != nil {
-		c.events.OnDownloadCompleted()
-	}
-
-	// 4. VerifyingBlocks (Simulated check)
-	c.changeState(StateVerifyingBlocks)
-	select {
-	case <-ctx.Done():
-		return
-	case <-time.After(50 * time.Millisecond):
-	}
-
-	// Simulate checking continuity (omitted hash/crypto logic as per RFC)
-	// 5. Completed
-	c.manager.UpdateLocalHeight(targetHeight)
-	c.changeState(StateCompleted)
 }
 
 func (c *SyncController) fail(err error) {

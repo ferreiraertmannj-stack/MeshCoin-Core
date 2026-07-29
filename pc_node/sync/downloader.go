@@ -154,3 +154,15 @@ func (d *Downloader) ActiveWorkers() int {
 func (d *Downloader) Progress() (completed, pending, failed int) {
 	return d.queue.CompletedChunks(), d.queue.PendingChunks(), d.queue.FailedChunks()
 }
+
+// PopDownloadedChunk retrieves and removes the oldest downloaded chunk.
+func (d *Downloader) PopDownloadedChunk() (*DownloadedChunk, bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if len(d.downloadedChunks) == 0 {
+		return nil, false
+	}
+	chunk := d.downloadedChunks[0]
+	d.downloadedChunks = d.downloadedChunks[1:]
+	return &chunk, true
+}
