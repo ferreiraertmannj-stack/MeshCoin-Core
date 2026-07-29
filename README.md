@@ -144,6 +144,25 @@ Módulos ESP32 com antenas de longo alcance atuando como repetidores cegos da re
 
 ---
 
+## 🏗️ Architecture Documentation
+
+The architectural documents have been organized into the `docs/architecture` directory. Please review them before modifying the system:
+
+- [AI Engineering Constitution](docs/architecture/AI_ENGINEERING_CONSTITUTION.md)
+- [Module Dependencies](docs/architecture/MODULE_DEPENDENCIES.md)
+- [Core Protocol](docs/architecture/CORE_PROTOCOL.md)
+- [AI Task Protocol](docs/architecture/AI_TASK_PROTOCOL.md)
+- [AI Context](docs/architecture/AI_CONTEXT.md)
+- [System Map](docs/architecture/SYSTEM_MAP.md)
+- [Engineering Decisions](docs/architecture/ENGINEERING_DECISIONS.md)
+- [System Invariants](docs/architecture/SYSTEM_INVARIANTS.md)
+- [Project Memory](docs/architecture/PROJECT_MEMORY.md)
+- [Codebase Index](docs/architecture/CODEBASE_INDEX.md)
+- [Architecture Overview](docs/architecture/ARCHITECTURE.md)
+- [AI Rules](docs/architecture/AI_RULES.md)
+
+---
+
 ## ⚡ Quick Start
 
 ### Pré-requisitos

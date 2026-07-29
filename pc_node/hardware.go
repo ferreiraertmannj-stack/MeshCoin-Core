@@ -23,14 +23,14 @@ func DetectStorageType() string {
 	if strings.Contains(outputStr, `"SSD"`) {
 		return "SSD"
 	}
-	
+
 	return "HDD"
 }
 
 // AllocateNebulaCloudStorage aloca um arquivo 'sparse' no disco para garantir o espaço cedido à nuvem
 func AllocateNebulaCloudStorage(gigabytes int) error {
 	filename := "nebula_cloud_storage.dat"
-	
+
 	// Se já existe, apenas verifica o tamanho
 	if stat, err := os.Stat(filename); err == nil {
 		expectedBytes := int64(gigabytes) * 1024 * 1024 * 1024
